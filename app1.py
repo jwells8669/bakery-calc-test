@@ -238,11 +238,26 @@ elif menu == "Generate Invoice":
         # Render invoice dynamically inside app view
         st.markdown(invoice_html, unsafe_allow_html=True)
         
-        st.write("---")
+       st.write("---")
         st.subheader("🖨️ Save Invoice as PDF")
         st.caption("Clicking the button below pulls up your browser's print utility. Simply select 'Save as PDF' as your printer target destination.")
         
-        # Inject custom print button component
-        st.components.v1.html(f"""
+        # Corrected HTML & JavaScript string integration
+        print_script = """
             <script>
-            function printInvoice()
+            function printInvoice() {
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write('<html><head><title>Invoice_Template</title></head><body>');
+                printWindow.document.write(`_INVOICE_CONTENT_`);
+                printWindow.document.write('</body></html>');
+                printWindow.document.close();
+                printWindow.print();
+            }
+            </script>
+            <button onclick="printInvoice()" style="background-color: #e76f51; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer;">
+                Open Print & PDF Menu
+            </button>
+        """.replace("_INVOICE_CONTENT_", invoice_html)
+        
+        # Inject the clean code component
+        st.components.v1.html(print_script, height=60)
