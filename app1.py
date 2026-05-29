@@ -123,7 +123,6 @@ elif menu == "Order Tracker":
             chosen_cake = st.selectbox("Select Baked Good Template", list(data["recipes"].keys()))
             due_date = st.date_input("Delivery/Pickup Date")
             
-            # Pricing math helper logic
             cost_to_make = calculate_recipe_cost(chosen_cake)
             quoted_price = st.number_input("Quoted Selling Price ($)", min_value=0.00, step=5.00, format="%.2f", value=cost_to_make*3)
             notes = st.text_area("Design Notes (e.g., 'Flavour: chocolate, text: Happy Birthday Mike')")
@@ -139,7 +138,6 @@ elif menu == "Order Tracker":
                 st.success(f"Order logged successfully! ID: {order_id}")
                 st.rerun()
 
-        # Display and manage ongoing orders
         if data["orders"]:
             st.write("---")
             st.subheader("Active Order Pipeline")
@@ -157,7 +155,6 @@ elif menu == "Order Tracker":
                         profit = o_info['price'] - o_info['cost']
                         st.write(f"**Estimated Profit:** ${profit:.2f}")
                     
-                    # Status updates & Deletions
                     new_status = st.selectbox("Update Status", ["Pending", "Baking", "Ready for Pickup", "Completed/Paid"], index=["Pending", "Baking", "Ready for Pickup", "Completed/Paid"].index(o_info["status"]), key=f"status_{o_id}")
                     if new_status != o_info["status"]:
                         data["orders"][o_id]["status"] = new_status
@@ -171,11 +168,74 @@ elif menu == "Order Tracker":
         else:
             st.info("No active orders found.")
 
-st.write("---")
+# -------------------------------------------------------------------
+# 4. GENERATE INVOICE
+# -------------------------------------------------------------------
+elif menu == "Generate Invoice":
+    st.header("📄 Invoice Generator")
+    
+    if not data["orders"]:
+        st.info("No orders logged yet. Go to 'Order Tracker' to add one.")
+    else:
+        order_options = {f"{v['customer']} - {v['item']} ({k})": k for k, v in data["orders"].items()}
+        selected_option = st.selectbox("Select Order to Generate Invoice For", list(order_options.keys()))
+        target_id = order_options[selected_option]
+        order = data["orders"][target_id]
+        
+        st.write("---")
+        st.subheader("Invoice Preview")
+        
+        invoice_html = f"""
+        <div style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; background-color: white; color: #333; font-family: Arial, sans-serif;">
+            <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #f4a261; padding-bottom: 10px;">
+                <div>
+                    <h2 style="margin:0; color: #e76f51;">🍰 Her Bakery Business Name</h2>
+                    <p style="margin:2px 0; font-size:12px; color:#666;">Fresh Custom bakes Made to Order</p>
+                </div>
+                <div style="text-align: right;">
+                    <h3 style="margin:0; color:#555;">INVOICE</h3>
+                    <p style="margin:2px 0; font-size:14px;"><b>Invoice #:</b> {target_id}</p>
+                    <p style="margin:2px 0; font-size:14px;"><b>Due Date:</b> {order['due_date']}</p>
+                </div>
+            </div>
+            
+            <div style="margin: 20px 0;">
+                <h4 style="margin:0 0 5px 0; color:#555;">BILL TO:</h4>
+                <p style="margin:2px 0;"><b>Name:</b> {order['customer']}</p>
+                <p style="margin:2px 0;"><b>Phone:</b> {order['phone']}</p>
+            </div>
+            
+            <table style="width:100%; border-collapse: collapse; margin-top: 20px;">
+                <thead>
+                    <tr style="background-color: #f4a261; color: white; text-align: left;">
+                        <th style="padding: 10px; border: 1px solid #ddd;">Description / Design Notes</th>
+                        <th style="padding: 10px; border: 1px solid #ddd; text-align: right; width: 120px;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #ddd;">
+                            <b>{order['item']}</b><br>
+                            <span style="font-size:13px; color:#555;">{order['notes']}</span>
+                        </td>
+                        <td style="padding: 10px; border: 1px solid #ddd; text-align: right; font-weight: bold;">${order['price']:.2f}</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div style="margin-top: 30px; text-align: right;">
+                <p style="font-size: 18px; margin:0;"><b>Grand Total: <span style="color:#e76f51;">${order['price']:.2f}</span></b></p>
+                <p style="font-size: 12px; color: #777; margin-top: 5px;">Thank you for supporting our small business!</p>
+            </div>
+        </div>
+        """
+        
+        st.markdown(invoice_html, unsafe_allow_html=True)
+        
+        st.write("---")
         st.subheader("🖨️ Save Invoice as PDF")
         st.caption("Clicking the button below pulls up your browser's print utility. Simply select 'Save as PDF' as your printer target destination.")
         
-        # Corrected HTML & JavaScript string integration
         print_script = """
             <script>
             function printInvoice() {
@@ -192,5 +252,4 @@ st.write("---")
             </button>
         """.replace("_INVOICE_CONTENT_", invoice_html)
         
-        # Inject the clean code component
         st.components.v1.html(print_script, height=60)
