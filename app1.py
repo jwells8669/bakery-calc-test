@@ -43,8 +43,10 @@ def calculate_recipe_cost(recipe_name):
 # -------------------------------------------------------------------
 if menu == "Manage Materials":
     st.header("📋 Material Inventory")
+    
     with st.form("add_material_form"):
         st.subheader("Add / Update Material")
+        st.caption("💡 To update an existing item's cost or details, just type its exact name below.")
         mat_name = st.text_input("Material Name (e.g., Flour, 10-inch Box, Butter)").strip()
         mat_category = st.selectbox("Category", ["Ingredients", "Packaging", "Hardware/Boards", "Other"])
         col1, col2, col3 = st.columns(3)
@@ -65,9 +67,39 @@ if menu == "Manage Materials":
             st.rerun()
 
     if data["materials"]:
+        st.write("---")
         st.subheader("Current Inventory")
-        inv_table = [{"Material": k, "Category": v["category"], "Bulk Price": f"${v['bulk_cost']:.2f}", "Cost per Unit": f"${v['unit_cost']:.4f} / {v['unit']}"} for k, v in data["materials"].items()]
+        
+        # Alphabetic Sorting Option
+        sort_alpha = st.checkbox("Sort Alphabetically")
+        material_keys = list(data["materials"].keys())
+        if sort_alpha:
+            material_keys = sorted(material_keys)
+            
+        inv_table = [
+            {
+                "Material": k, 
+                "Category": data["materials"][k]["category"], 
+                "Bulk Price": f"${data['materials'][k]['bulk_cost']:.2f}", 
+                "Cost per Unit": f"${data['materials'][k]['unit_cost']:.4f} / {data['materials'][k]['unit']}"
+            } 
+            for k in material_keys
+        ]
         st.table(inv_table)
+        
+        # Remove Material Section
+        st.subheader("🗑️ Remove Materials")
+        col_del1, col_del2 = st.columns([2, 1])
+        with col_del1:
+            del_target = st.selectbox("Select Material to Delete", sorted(list(data["materials"].keys())), key="del_mat_select")
+        with col_del2:
+            st.write("##") # Buffer spacer
+            if st.button("Delete Material", type="primary"):
+                if del_target in data["materials"]:
+                    del data["materials"][del_target]
+                    save_data(data)
+                    st.success(f"Removed {del_target} from inventory.")
+                    st.rerun()
 
 # -------------------------------------------------------------------
 # 2. BUILD RECIPES & TEMPLATES
@@ -82,7 +114,7 @@ elif menu == "Build Recipes & Templates":
         if "current_recipe_items" not in st.session_state:
             st.session_state.current_recipe_items = {}
             
-        selected_mat = st.selectbox("Select Material", list(data["materials"].keys()))
+        selected_mat = st.selectbox("Select Material", sorted(list(data["materials"].keys())))
         qty_needed = st.number_input(f"Amount Needed ({data['materials'][selected_mat]['unit']})", min_value=0.001, format="%.3f")
         
         if st.button("Add Item to Template"):
@@ -92,9 +124,12 @@ elif menu == "Build Recipes & Templates":
             st.write("### Current Items in Template:")
             draft_total = 0
             for item, qty in list(st.session_state.current_recipe_items.items()):
-                item_cost = data["materials"][item]["unit_cost"] * qty
-                draft_total += item_cost
-                st.write(f"- {item}: {qty} {data['materials'][item]['unit']} (${item_cost:.2f})")
+                if item in data["materials"]:
+                    item_cost = data["materials"][item]["unit_cost"] * qty
+                    draft_total += item_cost
+                    st.write(f"- {item}: {qty} {data['materials'][item]['unit']} (${item_cost:.2f})")
+                else:
+                    st.write(f"- {item}: {qty} (Material metadata missing)")
             st.write(f"**Total Cost to Make: ${draft_total:.2f}**")
             
             if st.button("Clear Draft"):
@@ -116,14 +151,19 @@ elif menu == "Order Tracker":
     if not data["recipes"]:
         st.warning("Create at least one Recipe Template before taking orders!")
     else:
+        # Dynamic template cost calculation to seed the form value
+        chosen_cake = st.selectbox("Select Baked Good Template", sorted(list(data["recipes"].keys())))
+        cost_to_make = calculate_recipe_cost(chosen_cake)
+        
+        st.info(f"💰 Current Dynamic Cost of **{chosen_cake}**: ${cost_to_make:.2f}")
+
         with st.form("new_order_form"):
             st.subheader("Log New Customer Order")
             cust_name = st.text_input("Customer Name").strip()
             cust_phone = st.text_input("Phone Number").strip()
-            chosen_cake = st.selectbox("Select Baked Good Template", list(data["recipes"].keys()))
             due_date = st.date_input("Delivery/Pickup Date")
             
-            cost_to_make = calculate_recipe_cost(chosen_cake)
+            # This baseline updates automatically when selecting different recipes above
             quoted_price = st.number_input("Quoted Selling Price ($)", min_value=0.00, step=5.00, format="%.2f", value=cost_to_make*3)
             notes = st.text_area("Design Notes (e.g., 'Flavour: chocolate, text: Happy Birthday Mike')")
             
