@@ -17,9 +17,11 @@ def save_data(data):
 
 data = load_data()
 
-# Ensure orders dictionary exists for backward compatibility
+# Ensure orders and recipes dictionaries exist for backward compatibility
 if "orders" not in data:
     data["orders"] = {}
+if "recipes" not in data:
+    data["recipes"] = {}
 
 st.title("🎂 Bakery Management Hub")
 
@@ -72,7 +74,7 @@ if menu == "Manage Materials":
         st.subheader("Current Inventory")
         st.caption("✏️ Modify any value directly below to update prices/units. Click the **🗑️ Delete** button to immediately remove an item.")
         
-        sort_alpha = st.checkbox("Sort Alphabetically")
+        sort_alpha = st.checkbox("Sort Alphabetically", key="sort_materials_alpha")
         material_keys = list(data["materials"].keys())
         if sort_alpha:
             material_keys = sorted(material_keys)
@@ -128,42 +130,141 @@ if menu == "Manage Materials":
 # 2. BUILD RECIPES & TEMPLATES
 # -------------------------------------------------------------------
 elif menu == "Build Recipes & Templates":
-    st.header("🏗️ Build Baked Goods Templates")
+    st.header("🏗️ Manage Baked Goods Templates")
+    
     if not data["materials"]:
         st.warning("Please add materials to inventory first!")
     else:
-        recipe_name = st.text_input("Recipe / Template Name (e.g., Standard Vanilla Cake)").strip()
-        st.write("---")
-        if "current_recipe_items" not in st.session_state:
-            st.session_state.current_recipe_items = {}
-            
-        selected_mat = st.selectbox("Select Material", sorted(list(data["materials"].keys())))
-        qty_needed = st.number_input(f"Amount Needed ({data['materials'][selected_mat]['unit']})", min_value=0.001, format="%.3f")
+        tab1, tab2 = st.tabs(["✨ Create New Template", "✏️ View & Edit Existing Templates"])
         
-        if st.button("Add Item to Template"):
-            st.session_state.current_recipe_items[selected_mat] = qty_needed
+        # TAB 1: CREATE NEW TEMPLATE
+        with tab1:
+            st.subheader("Build a New Recipe")
+            recipe_name = st.text_input("Recipe / Template Name (e.g., Standard Vanilla Cake)", key="new_recipe_title").strip()
+            st.write("---")
             
-        if st.session_state.current_recipe_items:
-            st.write("### Current Items in Template:")
-            draft_total = 0
-            for item, qty in list(st.session_state.current_recipe_items.items()):
-                if item in data["materials"]:
-                    item_cost = data["materials"][item]["unit_cost"] * qty
-                    draft_total += item_cost
-                    st.write(f"- {item}: {qty} {data['materials'][item]['unit']} (${item_cost:.2f})")
-                else:
-                    st.write(f"- {item}: {qty} (Material metadata missing)")
-            st.write(f"**Total Cost to Make: ${draft_total:.2f}**")
+            if "current_recipe_items" not in st.session_state:
+                st.session_state.current_recipe_items = {}
+                
+            selected_mat = st.selectbox("Select Material", sorted(list(data["materials"].keys())), key="new_recipe_mat")
+            qty_needed = st.number_input(f"Amount Needed ({data['materials'][selected_mat]['unit']})", min_value=0.001, format="%.3f", key="new_recipe_qty")
             
-            if st.button("Clear Draft"):
-                st.session_state.current_recipe_items = {}
-                st.rerun()
-            if recipe_name and st.button(f"Save '{recipe_name}' Template"):
-                data["recipes"][recipe_name] = st.session_state.current_recipe_items
-                save_data(data)
-                st.success(f"Saved {recipe_name}!")
-                st.session_state.current_recipe_items = {}
-                st.rerun()
+            if st.button("Add Item to Template", key="add_item_new_btn"):
+                st.session_state.current_recipe_items[selected_mat] = qty_needed
+                
+            if st.session_state.current_recipe_items:
+                st.write("### Current Items in Template:")
+                draft_total = 0
+                for item, qty in list(st.session_state.current_recipe_items.items()):
+                    if item in data["materials"]:
+                        item_cost = data["materials"][item]["unit_cost"] * qty
+                        draft_total += item_cost
+                        st.write(f"- {item}: {qty} {data['materials'][item]['unit']} (${item_cost:.2f})")
+                    else:
+                        st.write(f"- {item}: {qty} (Material metadata missing)")
+                st.write(f"**Total Cost to Make: ${draft_total:.2f}**")
+                
+                if st.button("Clear Draft", key="clear_draft_new_btn"):
+                    st.session_state.current_recipe_items = {}
+                    st.rerun()
+                if recipe_name and st.button(f"Save '{recipe_name}' Template", key="save_recipe_new_btn"):
+                    data["recipes"][recipe_name] = st.session_state.current_recipe_items
+                    save_data(data)
+                    st.success(f"Saved {recipe_name}!")
+                    st.session_state.current_recipe_items = {}
+                    st.rerun()
+
+        # TAB 2: VIEW, MODIFY & DELETE EXISTING RECIPES
+        with tab2:
+            st.subheader("Saved Recipe Templates")
+            if not data["recipes"]:
+                st.info("No recipes saved yet.")
+            else:
+                sort_rec_alpha = st.checkbox("Sort Templates Alphabetically", key="sort_recipes_alpha")
+                recipe_keys = list(data["recipes"].keys())
+                if sort_rec_alpha:
+                    recipe_keys = sorted(recipe_keys)
+                
+                for r_name in recipe_keys:
+                    r_cost = calculate_recipe_cost(r_name)
+                    
+                    # Layout row for recipe main data controls
+                    rec_col1, rec_col2, rec_col3 = st.columns([3, 1.5, 1.5])
+                    rec_col1.markdown(f"### 🍰 {r_name}")
+                    rec_col2.markdown(f"**Cost to Make:**\n${r_cost:.2f}")
+                    
+                    # One-Click Entire Recipe Delete Button
+                    if rec_col3.button("🗑️ Delete Template", key=f"del_recipe_{r_name}", type="primary"):
+                        del data["recipes"][r_name]
+                        save_data(data)
+                        st.success(f"Deleted recipe '{r_name}'")
+                        st.rerun()
+                        
+                    # Nested expander to edit the contents inside the template
+                    with st.expander(f"⚙️ Edit Recipe Ingredients ({len(data['recipes'][r_name])} items)"):
+                        ingredients_dict = data["recipes"][r_name]
+                        updated_ingredients = {}
+                        has_changes = False
+                        
+                        # Add a clean row header inside expander
+                        ing_header = st.columns([3, 2, 1.5])
+                        ing_header[0].markdown("**Ingredient/Material**")
+                        ing_header[1].markdown("**Quantity Needed**")
+                        ing_header[2].markdown("**Action**")
+                        
+                        for ing_item, ing_qty in list(ingredients_dict.items()):
+                            ing_cols = st.columns([3, 2, 1.5])
+                            
+                            # Show Name & Info
+                            unit_label = data["materials"][ing_item]["unit"] if ing_item in data["materials"] else ""
+                            ing_cols[0].write(f"**{ing_item}** ({unit_label})")
+                            
+                            # Inline input box to instantly change the amount needed
+                            new_ing_qty = ing_cols[1].number_input(
+                                "Qty", min_value=0.001, format="%.3f", 
+                                value=float(ing_qty), key=f"edit_qty_{r_name}_{ing_item}", 
+                                label_visibility="collapsed"
+                            )
+                            
+                            if new_ing_qty != ing_qty:
+                                updated_ingredients[ing_item] = new_ing_qty
+                                has_changes = True
+                            else:
+                                updated_ingredients[ing_item] = ing_qty
+                                
+                            # One-Click Ingredient row drop button
+                            if ing_cols[2].button("❌ Remove", key=f"drop_ing_{r_name}_{ing_item}", use_container_width=True):
+                                del updated_ingredients[ing_item]
+                                data["recipes"][r_name] = updated_ingredients
+                                save_data(data)
+                                st.rerun()
+                        
+                        # Sub-form UI feature: Let them add a new ingredient directly to this recipe
+                        st.write("---")
+                        st.markdown("**➕ Add an extra ingredient to this template:**")
+                        add_ing_cols = st.columns([3, 2, 1.5])
+                        
+                        # Filter out materials already used in the recipe
+                        available_mats = [m for m in data["materials"].keys() if m not in updated_ingredients]
+                        
+                        if available_mats:
+                            mat_to_add = add_ing_cols[0].selectbox("Select Material to Add", sorted(available_mats), key=f"add_mat_select_{r_name}", label_visibility="collapsed")
+                            qty_to_add = add_ing_cols[1].number_input("Qty to Add", min_value=0.001, format="%.3f", key=f"add_mat_qty_{r_name}", label_visibility="collapsed")
+                            
+                            if add_ing_cols[2].button("➕ Add", key=f"add_mat_btn_{r_name}", use_container_width=True):
+                                updated_ingredients[mat_to_add] = qty_to_add
+                                data["recipes"][r_name] = updated_ingredients
+                                save_data(data)
+                                st.rerun()
+                        else:
+                            st.caption("All available materials are already added to this recipe!")
+                            
+                        # Save modified input variations inside sub-expander list
+                        if has_changes:
+                            data["recipes"][r_name] = updated_ingredients
+                            save_data(data)
+                            st.rerun()
+                    st.write("---")
 
 # -------------------------------------------------------------------
 # 3. ORDER TRACKER
@@ -185,7 +286,7 @@ elif menu == "Order Tracker":
             cust_phone = st.text_input("Phone Number").strip()
             due_date = st.date_input("Delivery/Pickup Date")
             
-            # CUSTOM PRICING FORMULA APPLIED HERE: ((cost) / 2) * 3
+            # CUSTOM PRICING FORMULA: ((cost) / 2) * 3
             custom_suggested_price = (cost_to_make / 2.0) * 3.0
             
             quoted_price = st.number_input("Quoted Selling Price ($)", min_value=0.00, step=5.00, format="%.2f", value=custom_suggested_price)
