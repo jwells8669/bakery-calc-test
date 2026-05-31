@@ -44,9 +44,9 @@ def calculate_recipe_cost(recipe_name):
 if menu == "Manage Materials":
     st.header("📋 Material Inventory")
     
+    # 1. ADD NEW MATERIAL FORM
     with st.form("add_material_form"):
-        st.subheader("Add / Update Material")
-        st.caption("💡 To update an existing item's cost or details, just type its exact name below.")
+        st.subheader("Add New Material")
         mat_name = st.text_input("Material Name (e.g., Flour, 10-inch Box, Butter)").strip()
         mat_category = st.selectbox("Category", ["Ingredients", "Packaging", "Hardware/Boards", "Other"])
         col1, col2, col3 = st.columns(3)
@@ -57,49 +57,76 @@ if menu == "Manage Materials":
         with col3:
             unit = st.text_input("Unit (e.g., g, piece, ml)").strip()
             
-        if st.form_submit_button("Save Material") and mat_name:
+        if st.form_submit_button("Add to Inventory") and mat_name:
             unit_cost = bulk_cost / bulk_qty
             data["materials"][mat_name] = {
                 "category": mat_category, "bulk_cost": bulk_cost, "bulk_qty": bulk_qty, "unit": unit, "unit_cost": unit_cost
             }
             save_data(data)
-            st.success(f"Saved {mat_name}!")
+            st.success(f"Added {mat_name}!")
             st.rerun()
 
+    # 2. INTERACTIVE INVENTORY VIEW (EDIT & DELETE HERE)
     if data["materials"]:
         st.write("---")
         st.subheader("Current Inventory")
+        st.caption("✏️ **Double-click any cell** below to instantly edit names, costs, quantities, or units. Check the box on the left and hit your keyboard's **Delete** key to remove an item.")
         
-        # Alphabetic Sorting Option
         sort_alpha = st.checkbox("Sort Alphabetically")
         material_keys = list(data["materials"].keys())
         if sort_alpha:
             material_keys = sorted(material_keys)
             
-        inv_table = [
-            {
-                "Material": k, 
-                "Category": data["materials"][k]["category"], 
-                "Bulk Price": f"${data['materials'][k]['bulk_cost']:.2f}", 
-                "Cost per Unit": f"${data['materials'][k]['unit_cost']:.4f} / {data['materials'][k]['unit']}"
-            } 
-            for k in material_keys
-        ]
-        st.table(inv_table)
+        # Build list of dictionaries for data editor format
+        raw_rows = []
+        for k in material_keys:
+            m = data["materials"][k]
+            raw_rows.append({
+                "Original Name": k, # Keep track of key if user edits the name
+                "Material Name": k,
+                "Category": m["category"],
+                "Bulk Cost ($)": float(m["bulk_cost"]),
+                "Bulk Qty": float(m["bulk_qty"]),
+                "Unit": m["unit"],
+                "Cost per Unit ($)": round(m["unit_cost"], 4)
+            })
+            
+        # Display editable data frame
+        edited_df = st.data_editor(
+            raw_rows,
+            num_rows="dynamic", # Enables row deletion natively via UI checkbox/Delete key
+            column_config={
+                "Original Name": None, # Hide tracking column
+                "Category": st.column_config.SelectboxColumn(options=["Ingredients", "Packaging", "Hardware/Boards", "Other"]),
+                "Cost per Unit ($)": st.column_config.NumberColumn(disabled=True, format="$%.4f") # Auto-calculated
+            },
+            key="inventory_editor",
+            use_container_width=True
+        )
         
-        # Remove Material Section
-        st.subheader("🗑️ Remove Materials")
-        col_del1, col_del2 = st.columns([2, 1])
-        with col_del1:
-            del_target = st.selectbox("Select Material to Delete", sorted(list(data["materials"].keys())), key="del_mat_select")
-        with col_del2:
-            st.write("##") # Buffer spacer
-            if st.button("Delete Material", type="primary"):
-                if del_target in data["materials"]:
-                    del data["materials"][del_target]
-                    save_data(data)
-                    st.success(f"Removed {del_target} from inventory.")
-                    st.rerun()
+        # Process changes only if data layout changes
+        if edited_df != raw_rows:
+            new_materials = {}
+            for row in edited_df:
+                name = row["Material Name"].strip()
+                if not name:
+                    continue
+                
+                # Safeguard zero division
+                b_qty = row["Bulk Qty"] if row["Bulk Qty"] > 0 else 1.0
+                u_cost = row["Bulk Cost ($)"] / b_qty
+                
+                new_materials[name] = {
+                    "category": row["Category"],
+                    "bulk_cost": row["Bulk Cost ($)"],
+                    "bulk_qty": row["Bulk Qty"],
+                    "unit": row["Unit"].strip(),
+                    "unit_cost": u_cost
+                }
+            
+            data["materials"] = new_materials
+            save_data(data)
+            st.rerun()
 
 # -------------------------------------------------------------------
 # 2. BUILD RECIPES & TEMPLATES
@@ -151,7 +178,6 @@ elif menu == "Order Tracker":
     if not data["recipes"]:
         st.warning("Create at least one Recipe Template before taking orders!")
     else:
-        # Dynamic template cost calculation to seed the form value
         chosen_cake = st.selectbox("Select Baked Good Template", sorted(list(data["recipes"].keys())))
         cost_to_make = calculate_recipe_cost(chosen_cake)
         
@@ -163,7 +189,6 @@ elif menu == "Order Tracker":
             cust_phone = st.text_input("Phone Number").strip()
             due_date = st.date_input("Delivery/Pickup Date")
             
-            # This baseline updates automatically when selecting different recipes above
             quoted_price = st.number_input("Quoted Selling Price ($)", min_value=0.00, step=5.00, format="%.2f", value=cost_to_make*3)
             notes = st.text_area("Design Notes (e.g., 'Flavour: chocolate, text: Happy Birthday Mike')")
             
@@ -282,7 +307,6 @@ elif menu == "Generate Invoice":
                 const printWindow = window.open('', '_blank');
                 printWindow.document.write('<html><head><title>Invoice_Template</title></head><body>');
                 printWindow.document.write(`_INVOICE_CONTENT_`);
-                printWindow.document.write('</body></html>');
                 printWindow.document.close();
                 printWindow.print();
             }
