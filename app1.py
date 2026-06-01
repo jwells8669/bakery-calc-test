@@ -505,3 +505,4 @@ elif menu == "Generate Invoice":
         """.replace("_INVOICE_CONTENT_", invoice_html)
         
         st.components.v1.html(print_script, height=60)
+    
