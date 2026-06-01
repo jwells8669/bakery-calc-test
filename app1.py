@@ -226,92 +226,52 @@ elif menu == "Build Recipes & Templates":
                         save_data(data)
                         st.rerun()
                         
-                    with st.expander(f"⚙️ Edit & Drag-Drop Sort Ingredients ({len(data['recipes'].get(new_recipe_name, {}))} items)"):
+                    with st.expander(f"⚙️ Edit & Order Ingredients ({len(data['recipes'].get(new_recipe_name, {}))} items)"):
                         ingredients_dict = data["recipes"].get(new_recipe_name, {})
                         items_list = list(ingredients_dict.keys())
                         
-                        st.markdown("#### ↕️ Drag & Drop to Sort Order")
-                        st.caption("Grab any item, drag it vertically to re-arrange, and click **💾 Save Layout Order** below to commit changes.")
+                        st.markdown("#### 🌾 Ingredients & Layout Sequencing Matrix")
+                        st.caption("Adjust quantities, remove items, or use the **🔼 Up** and **🔽 Down** buttons to order items step-by-step.")
                         
-                        # Format list items into HTML list
-                        li_elements = "".join([
-                            f'<li data-id="{item}" style="padding:10px; margin: 5px 0; background-color:#f4f8f7; border:1px solid #ddd; border-left:4px solid #a3c9c1; border-radius:4px; list-style-type:none; cursor:grab; font-family:sans-serif; font-size:14px; color:#333;"><b>☰</b> &nbsp;&nbsp; {item} ({ingredients_dict[item]} {data["materials"][item]["unit"] if item in data["materials"] else ""})</li>'
-                            for item in items_list
-                        ])
-                        
-                        # Stable version-independent hidden element bridge back to Streamlit python variables
-                        js_order_bridge_id = f"hidden_order_output_{new_recipe_name.replace(' ', '_')}"
-                        
-                        sortable_html = f"""
-                        <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
-                        <ul id="list_{js_order_bridge_id}" style="padding-left:0; margin:0;">
-                            {li_elements}
-                        </ul>
-                        <script>
-                            var el = document.getElementById('list_{js_order_bridge_id}');
-                            Sortable.create(el, {{
-                                animation: 150,
-                                onEnd: function() {{
-                                    var order = [];
-                                    var items = el.getElementsByTagName('li');
-                                    for (var i = 0; i < items.length; i++) {{
-                                        order.push(items[i].getAttribute('data-id'));
-                                    }}
-                                    // Ship sequence back via top window standard DOM input interaction
-                                    var targetInput = window.parent.document.querySelectorAll('input[aria-label="{js_order_bridge_id}"]')[0];
-                                    if (targetInput) {{
-                                        targetInput.value = JSON.stringify(order);
-                                        targetInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                                    }}
-                                }}
-                            }});
-                        </script>
-                        """
-                        st.components.v1.html(sortable_html, height=min(len(items_list) * 52 + 20, 400), scrolling=True)
-                        
-                        # Hidden native input element used to safely catch the array string without crashing context configurations
-                        hidden_state_catcher = st.text_input(
-                            label=js_order_bridge_id, 
-                            value=json.dumps(items_list),
-                            key=f"catch_input_{new_recipe_name}",
-                            label_visibility="collapsed"
-                        )
-                        
-                        if hidden_state_catcher and hidden_state_catcher != json.dumps(items_list):
-                            if st.button("💾 Save Layout Order", key=f"btn_save_order_{new_recipe_name}"):
-                                try:
-                                    raw_sorted_keys = json.loads(hidden_state_catcher)
-                                    new_sorted_dict = {k: ingredients_dict[k] for k in raw_sorted_keys if k in ingredients_dict}
-                                    
-                                    for leftover in ingredients_dict:
-                                        if leftover not in new_sorted_dict:
-                                            new_sorted_dict[leftover] = ingredients_dict[leftover]
-                                            
-                                    data["recipes"][new_recipe_name] = new_sorted_dict
-                                    save_data(data)
-                                    st.success("Template visual order updated!")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error("Could not complete sequence adjustment layout update.")
-                        
-                        st.write("---")
-                        
-                        # --- INGREDIENT VALUES ADJUSTMENT GRID ---
-                        st.markdown("#### 🌾 Quantity Adjustment Matrix")
                         updated_ingredients = {}
                         has_changes = False
                         
-                        ing_header = st.columns([3, 2, 1.5])
-                        ing_header[0].markdown("**Ingredient/Material**")
-                        ing_header[1].markdown("**Quantity Needed**")
-                        ing_header[2].markdown("**Action**")
+                        ing_header = st.columns([1, 2.5, 2, 1.5])
+                        ing_header[0].markdown("**Reorder**")
+                        ing_header[1].markdown("**Ingredient/Material**")
+                        ing_header[2].markdown("**Quantity Needed**")
+                        ing_header[3].markdown("**Action**")
                         
-                        for ing_item, ing_qty in list(ingredients_dict.items()):
-                            ing_cols = st.columns([3, 2, 1.5])
-                            unit_label = data["materials"][ing_item]["unit"] if ing_item in data["materials"] else ""
-                            ing_cols[0].write(f"**{ing_item}** ({unit_label})")
+                        for idx, ing_item in enumerate(items_list):
+                            ing_qty = ingredients_dict[ing_item]
+                            ing_cols = st.columns([1, 2.5, 2, 1.5])
                             
-                            new_ing_qty = ing_cols[1].number_input(
+                            # --- NATIVE REORDER ARROWS ---
+                            btn_col1, btn_col2 = ing_cols[0].columns(2)
+                            
+                            # Up arrow button (hidden or disabled for the top item)
+                            if idx > 0:
+                                if btn_col1.button("🔼", key=f"up_{new_recipe_name}_{ing_item}"):
+                                    # Swap current item with the previous one
+                                    items_list[idx], items_list[idx-1] = items_list[idx-1], items_list[idx]
+                                    data["recipes"][new_recipe_name] = {k: ingredients_dict[k] for k in items_list}
+                                    save_data(data)
+                                    st.rerun()
+                                    
+                            # Down arrow button (hidden or disabled for the last item)
+                            if idx < len(items_list) - 1:
+                                if btn_col2.button("🔽", key=f"down_{new_recipe_name}_{ing_item}"):
+                                    # Swap current item with the next one
+                                    items_list[idx], items_list[idx+1] = items_list[idx+1], items_list[idx]
+                                    data["recipes"][new_recipe_name] = {k: ingredients_dict[k] for k in items_list}
+                                    save_data(data)
+                                    st.rerun()
+                            
+                            # --- INGREDIENT & QUANTITY INPUTS ---
+                            unit_label = data["materials"][ing_item]["unit"] if ing_item in data["materials"] else ""
+                            ing_cols[1].write(f"**{ing_item}** ({unit_label})")
+                            
+                            new_ing_qty = ing_cols[2].number_input(
                                 "Qty", min_value=0.001, format="%.3f", value=float(ing_qty), key=f"edit_qty_{new_recipe_name}_{ing_item}", label_visibility="collapsed"
                             )
                             
@@ -321,29 +281,37 @@ elif menu == "Build Recipes & Templates":
                             else:
                                 updated_ingredients[ing_item] = ing_qty
                                 
-                            if ing_cols[2].button("❌ Remove", key=f"drop_ing_{new_recipe_name}_{ing_item}", use_container_width=True):
-                                del updated_ingredients[ing_item]
-                                data["recipes"][new_recipe_name] = updated_ingredients
+                            if ing_cols[3].button("❌ Remove", key=f"drop_ing_{new_recipe_name}_{ing_item}", use_container_width=True):
+                                # Re-construct array removing the item entirely
+                                remaining_items = [i for i in items_list if i != ing_item]
+                                data["recipes"][new_recipe_name] = {k: ingredients_dict[k] for k in remaining_items}
                                 save_data(data)
                                 st.rerun()
                         
                         st.write("---")
                         st.markdown("**➕ Add an extra ingredient to this template:**")
                         add_ing_cols = st.columns([3, 2, 1.5])
-                        available_mats = [m for m in data["materials"].keys() if m not in updated_ingredients]
+                        
+                        # Use the current state of items_list to determine available items
+                        available_mats = [m for m in data["materials"].keys() if m not in ingredients_dict]
                         
                         if available_mats:
                             mat_to_add = add_ing_cols[0].selectbox("Select Material to Add", sorted(available_mats), key=f"add_mat_select_{new_recipe_name}", label_visibility="collapsed")
                             qty_to_add = add_ing_cols[1].number_input("Qty to Add", min_value=0.001, format="%.3f", key=f"add_mat_qty_{new_recipe_name}", label_visibility="collapsed")
                             
                             if add_ing_cols[2].button("➕ Add", key=f"add_mat_btn_{new_recipe_name}", use_container_width=True):
-                                updated_ingredients[mat_to_add] = qty_to_add
-                                data["recipes"][new_recipe_name] = updated_ingredients
+                                # Append to the end of the existing ordered dictionary
+                                data["recipes"][new_recipe_name][mat_to_add] = qty_to_add
                                 save_data(data)
                                 st.rerun()
                         
                         if has_changes:
-                            data["recipes"][new_recipe_name] = updated_ingredients
+                            # Apply updated values keeping the current exact keys sequence intact
+                            ordered_updated = {}
+                            for k in items_list:
+                                if k in updated_ingredients:
+                                    ordered_updated[k] = updated_ingredients[k]
+                            data["recipes"][new_recipe_name] = ordered_updated
                             save_data(data)
                             st.rerun()
                     st.write("---")
