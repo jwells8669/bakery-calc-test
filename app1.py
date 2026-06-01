@@ -194,7 +194,6 @@ elif menu == "Build Recipes & Templates":
                 for r_name in recipe_keys:
                     r_cost = calculate_recipe_cost(r_name)
                     
-                    # Top Level Row: Name Input | Cost | Clone Button | Delete Button
                     rec_col1, rec_col2, rec_col3, rec_col4 = st.columns([3, 1.2, 1.1, 1.2])
                     
                     new_recipe_name = rec_col1.text_input(
@@ -203,7 +202,6 @@ elif menu == "Build Recipes & Templates":
                     
                     rec_col2.markdown(f"**Cost:**\n${r_cost:.2f}")
                     
-                    # 👯 Top-level Fast-Clone Button
                     if rec_col3.button("👯 Clone", key=f"fast_clone_{r_name}", use_container_width=True):
                         base_dup_name = f"{new_recipe_name} (Copy)"
                         dup_name = base_dup_name
@@ -228,8 +226,78 @@ elif menu == "Build Recipes & Templates":
                         save_data(data)
                         st.rerun()
                         
-                    with st.expander(f"⚙️ Edit Recipe Ingredients ({len(data['recipes'].get(new_recipe_name, {}))} items)"):
+                    with st.expander(f"⚙️ Edit & Drag-Drop Sort Ingredients ({len(data['recipes'].get(new_recipe_name, {}))} items)"):
                         ingredients_dict = data["recipes"].get(new_recipe_name, {})
+                        
+                        # --- DRAG & DROP SORTING MATRIX (Sortable.js Component) ---
+                        st.markdown("#### ↕️ Drag & Drop to Sort Order")
+                        st.caption("Grab any item, drag it vertically to re-arrange, and click **💾 Save Layout Order** below to commit changes.")
+                        
+                        items_list = list(ingredients_dict.keys())
+                        
+                        # Format list items into HTML list
+                        li_elements = "".join([
+                            f'<li data-id="{item}" style="padding:10px; margin: 5px 0; background-color:#f4f8f7; border:1px solid #ddd; border-left:4px solid #a3c9c1; border-radius:4px; list-style-type:none; cursor:grab; font-family:sans-serif; font-size:14px; color:#333;">☰ &nbsp;&nbsp; <b>{item}</b> ({ingredients_dict[item]} {data["materials"][item]["unit"] if item in data["materials"] else ""})</li>'
+                            for item in items_list
+                        ])
+                        
+                        # Inject SortableJS engine
+                        sortable_html = f"""
+                        <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+                        <ul id="shared-sortable-list" style="padding-left:0; margin:0;">
+                            {li_elements}
+                        </ul>
+                        <script>
+                            var el = document.getElementById('shared-sortable-list');
+                            var sortable = Sortable.create(el, {{
+                                animation: 150,
+                                ghostClass: 'blue-background-class',
+                                onEnd: function() {{
+                                    var order = [];
+                                    var items = el.getElementsByTagName('li');
+                                    for (var i = 0; i < items.length; i++) {{
+                                        order.push(items[i].getAttribute('data-id'));
+                                    }}
+                                    // Ship the text order dynamically back to streamlit query params
+                                    const url = new URL(window.parent.location.href);
+                                    url.searchParams.set('new_order_{new_recipe_name}', JSON.stringify(order));
+                                    window.parent.history.replaceState({{}}, '', url);
+                                }}
+                            }});
+                        </script>
+                        """
+                        st.components.v1.html(sortable_html, height=min(len(items_list) * 52 + 20, 400), scrolling=True)
+                        
+                        # Handle the save event triggered from the script architecture
+                        query_key = f"new_order_{new_recipe_name}"
+                        st_params = st.context.query_params
+                        
+                        if query_key in st_params:
+                            if st.button("💾 Save Layout Order", key=f"btn_save_order_{new_recipe_name}"):
+                                try:
+                                    raw_sorted_keys = json.loads(st_params[query_key])
+                                    # Remap the dictionary using the new sorted key architecture
+                                    new_sorted_dict = {{k: ingredients_dict[k] for k in raw_sorted_keys if k in ingredients_dict}}
+                                    
+                                    # Include any leftovers if they missed the script transaction pass
+                                    for leftover in ingredients_dict:
+                                        if leftover not in new_sorted_dict:
+                                            new_sorted_dict[leftover] = ingredients_dict[leftover]
+                                            
+                                    data["recipes"][new_recipe_name] = new_sorted_dict
+                                    save_data(data)
+                                    
+                                    # Cleanup tracking parameters
+                                    st.context.query_params.clear()
+                                    st.success("Template visual order updated!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error("Could not parse re-order layout update.")
+                        
+                        st.write("---")
+                        
+                        # --- INGREDIENT VALUES ADJUSTMENT GRID ---
+                        st.markdown("#### 🌾 Quantity Adjustment Matrix")
                         updated_ingredients = {}
                         has_changes = False
                         
