@@ -135,7 +135,7 @@ if menu == "Manage Materials":
                 st.rerun()
 
 # -------------------------------------------------------------------
-# 2. BUILD RECIPES & TEMPLATES (WITH CLONING/DUPLICATION SUPPORT)
+# 2. BUILD RECIPES & TEMPLATES
 # -------------------------------------------------------------------
 elif menu == "Build Recipes & Templates":
     st.header("🏗️ Manage Baked Goods Templates")
@@ -193,15 +193,31 @@ elif menu == "Build Recipes & Templates":
                 
                 for r_name in recipe_keys:
                     r_cost = calculate_recipe_cost(r_name)
-                    rec_col1, rec_col2, rec_col3 = st.columns([3, 1.5, 1.5])
+                    
+                    # Top Level Row: Name Input | Cost | Clone Button | Delete Button
+                    rec_col1, rec_col2, rec_col3, rec_col4 = st.columns([3, 1.2, 1.1, 1.2])
                     
                     new_recipe_name = rec_col1.text_input(
                         "Recipe Name", value=r_name, key=f"edit_rec_name_{r_name}", label_visibility="collapsed"
                     ).strip()
                     
-                    rec_col2.markdown(f"**Cost to Make:**\n${r_cost:.2f}")
+                    rec_col2.markdown(f"**Cost:**\n${r_cost:.2f}")
                     
-                    if rec_col3.button("🗑️ Delete Template", key=f"del_recipe_{r_name}", type="primary"):
+                    # 👯 Top-level Fast-Clone Button
+                    if rec_col3.button("👯 Clone", key=f"fast_clone_{r_name}", use_container_width=True):
+                        base_dup_name = f"{new_recipe_name} (Copy)"
+                        dup_name = base_dup_name
+                        counter = 1
+                        while dup_name in data["recipes"]:
+                            dup_name = f"{base_dup_name} {counter}"
+                            counter += 1
+                        
+                        data["recipes"][dup_name] = dict(data["recipes"].get(r_name, {}))
+                        save_data(data)
+                        st.success(f"Cloned into '{dup_name}'!")
+                        st.rerun()
+                    
+                    if rec_col4.button("🗑️ Delete", key=f"del_recipe_{r_name}", type="primary", use_container_width=True):
                         del data["recipes"][r_name]
                         save_data(data)
                         st.success(f"Deleted recipe '{r_name}'")
@@ -212,29 +228,7 @@ elif menu == "Build Recipes & Templates":
                         save_data(data)
                         st.rerun()
                         
-                    # Multi-use expander to modify details or clone sizes
-                    with st.expander(f"⚙️ Edit / Duplicate '{new_recipe_name}' ({len(data['recipes'].get(new_recipe_name, {}))} items)"):
-                        
-                        # --- DUPLICATION SECTION ---
-                        st.markdown("#### 👯 Duplicate & Tweak for Different Size")
-                        dup_col1, dup_col2 = st.columns([3, 1.5])
-                        suggested_dup_name = f"{new_recipe_name} (Copy)"
-                        new_dup_name = dup_col1.text_input("New Variant Name", value=suggested_dup_name, key=f"dup_name_input_{r_name}").strip()
-                        
-                        if dup_col2.button("Clone Template", key=f"dup_btn_{r_name}"):
-                            if new_dup_name and new_dup_name != new_recipe_name:
-                                # Create deep copy of existing dictionary setup
-                                data["recipes"][new_dup_name] = dict(data["recipes"][new_recipe_name])
-                                save_data(data)
-                                st.success(f"Cloned into '{new_dup_name}'! Look for it below to tweak values.")
-                                st.rerun()
-                            else:
-                                st.error("Please supply a unique name variant.")
-                        
-                        st.write("---")
-                        
-                        # --- INGREDIENT LIST MODIFICATION SECTION ---
-                        st.markdown("#### 🌾 Ingredients Matrix")
+                    with st.expander(f"⚙️ Edit Recipe Ingredients ({len(data['recipes'].get(new_recipe_name, {}))} items)"):
                         ingredients_dict = data["recipes"].get(new_recipe_name, {})
                         updated_ingredients = {}
                         has_changes = False
@@ -505,4 +499,3 @@ elif menu == "Generate Invoice":
         """.replace("_INVOICE_CONTENT_", invoice_html)
         
         st.components.v1.html(print_script, height=60)
-    
