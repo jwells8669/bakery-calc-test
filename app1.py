@@ -51,12 +51,35 @@ def load_data():
     except Exception as e:
         st.error(f"⚠️ Could not load data: {e}")
         return fallback_data
-        
 def save_data(updated_data):
+    # Update local state immediately
     st.session_state.bakery_data = updated_data
-    # Note: Implementing REST 'PATCH' for saving is more complex.
-    # For now, this placeholder ensures your app doesn't crash.
-    st.warning("Save functionality requires REST API PATCH implementation.")
+    
+    try:
+        # 1. Get auth token
+        token = get_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        
+        # 2. Transform Python dict to Firebase REST format
+        # We wrap the whole object in a 'fields' dictionary
+        payload = {"fields": {}}
+        for key, value in updated_data.items():
+            # Simplistic mapping: check if value is a dict or string
+            val_type = "mapValue" if isinstance(value, dict) else "stringValue"
+            payload["fields"][key] = {val_type: {"fields": value} if val_type == "mapValue" else value}
+
+        # 3. Send PATCH request to update the document
+        url = "https://firestore.googleapis.com/v1/projects/whisk-y-business/databases/(default)/documents/bakery/data"
+        response = requests.patch(url, headers=headers, json=payload)
+        
+        if response.status_code != 200:
+            st.error(f"❌ Save Failed: {response.text}")
+            
+    except Exception as e:
+        st.error(f"❌ Save Error: {e}")
 
 # Initialize Session State
 if "bakery_data" not in st.session_state:
