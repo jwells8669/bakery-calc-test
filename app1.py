@@ -3,66 +3,57 @@ import json
 import os
 from datetime import datetime
 import base64
-import asyncio
 from google.cloud import firestore
 from google.oauth2 import service_account
 
-# --- ASYNC DATABASE CONNECTORS ---
-# Pre-initialize data structure
-if "bakery_data" not in st.session_state:
-    st.session_state.bakery_data = {"materials": {}, "recipes": {}, "orders": {}}
-
-# Helper to get/create an event loop safely in Streamlit
-def get_async_loop():
+# --- SAFELY CACHE FIRESTORE CONNECTION ---
+@st.cache_resource
+def get_database_client():
+    if "gcp_service_account" not in st.secrets:
+        return None
     try:
-        return asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop
+        creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+        # Standard client, cached globally so it never blocks page threads
+        return firestore.Client(credentials=creds)
+    except Exception as e:
+        return None
 
-async def fetch_firestore_data():
-    if "gcp_service_account" in st.secrets:
-        try:
-            creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-            # Using AsyncClient to completely prevent Streamlit threading lockups
-            db_client = firestore.AsyncClient(credentials=creds)
-            doc_ref = db_client.collection("bakery").document("data")
-            doc = await doc_ref.get()
-            if doc.exists:
-                return doc.to_dict()
-        except Exception as e:
-            st.sidebar.error(f"❌ Async Fetch Failed: {e}")
-    return None
+db_client = get_database_client()
 
-async def save_firestore_data(updated_data):
-    if "gcp_service_account" in st.secrets:
-        try:
-            creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-            db_client = firestore.AsyncClient(credentials=creds)
-            doc_ref = db_client.collection("bakery").document("data")
-            await doc_ref.set(updated_data)
-        except Exception as e:
-            st.error(f"❌ Async Save Failed: {e}")
-
-# Run the async data fetcher
-loop = get_async_loop()
-fetched = loop.run_until_complete(fetch_firestore_data())
-
-if fetched and isinstance(fetched, dict):
-    st.session_state.bakery_data.update(fetched)
-
-data = st.session_state.bakery_data
-
-# Ensure core layout dictionaries exist
-if "orders" not in data: data["orders"] = {}
-if "recipes" not in data: data["recipes"] = {}
-if "materials" not in data: data["materials"] = {}
+# --- CACHE DATA FETCHING ---
+def load_data():
+    fallback_data = {"materials": {}, "recipes": {}, "orders": {}}
+    if db_client is None:
+        return fallback_data
+    try:
+        doc_ref = db_client.collection("bakery").document("data")
+        doc = doc_ref.get()
+        if doc.exists:
+            fetched = doc.to_dict()
+            return fetched if fetched else fallback_data
+    except Exception as e:
+        pass
+    return fallback_data
 
 def save_data(updated_data):
     st.session_state.bakery_data = updated_data
-    loop = get_async_loop()
-    loop.run_until_complete(save_firestore_data(updated_data))
+    if db_client is not None:
+        try:
+            doc_ref = db_client.collection("bakery").document("data")
+            doc_ref.set(updated_data)
+        except Exception as e:
+            st.error(f"❌ Save Failed: {e}")
+
+# Initialize session state data structure
+if "bakery_data" not in st.session_state:
+    st.session_state.bakery_data = load_data()
+
+data = st.session_state.bakery_data
+
+# Double-check structure integrity
+if "orders" not in data: data["orders"] = {}
+if "recipes" not in data: data["recipes"] = {}
+if "materials" not in data: data["materials"] = {}
 
 LOGO_FILE = "whiskybusiness.jpg"
 
