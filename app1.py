@@ -1,11 +1,4 @@
 import streamlit as st
-import os
-
-# 🚨 THE MAGIC FIX FOR GRPC DEADLOCKS 🚨
-# These force the networking engine to behave in containerized environments
-os.environ["GRPC_DNS_RESOLVER"] = "native"
-os.environ["GRPC_ENABLE_FORK_SUPPORT"] = "1"
-
 from google.cloud import firestore
 from google.oauth2 import service_account
 
@@ -13,14 +6,14 @@ st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁", layout="
 
 st.write("Checkpoint 1: App Started...")
 
-@st.cache_resource(ttl=3600)
+# 🚨 THE FIX: NO CACHING DECORATOR HERE 🚨
+# Caching gRPC connections on a Uvicorn server causes permanent deadlocks.
 def get_database_client():
     if "gcp_service_account" not in st.secrets:
         st.error("Missing Secrets!")
         return None
     try:
         creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-        # 🚨 FIX #2: Explicitly state the project_id to prevent metadata timeouts
         return firestore.Client(credentials=creds, project=creds.project_id)
     except Exception as e:
         st.error(f"Failed to auth: {e}")
@@ -39,7 +32,7 @@ def load_data():
             st.write("Checkpoint 4: Data found!")
             return doc.to_dict()
         else:
-            st.write("Checkpoint 4: Database is empty (this is normal after deletion!)")
+            st.write("Checkpoint 4: Database is empty (this is normal!)")
             return {}
             
     except Exception as e:
@@ -47,7 +40,7 @@ def load_data():
         return {}
 
 data = load_data()
-st.write("Checkpoint 5: Success! The gRPC deadlock has been bypassed.")
+st.write("Checkpoint 5: Success! The Uvicorn deadlock has been bypassed.")
 
 def save_data(updated_data):
     st.session_state.bakery_data = updated_data
