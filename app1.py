@@ -5,56 +5,46 @@ from datetime import datetime
 import base64
 from google.cloud import firestore
 from google.oauth2 import service_account
+import streamlit.components.v1 as components
 
-# --- SAFELY CACHE FIRESTORE CONNECTION ---
+# --- 1. MUST BE FIRST ---
+st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁", layout="wide")
+
+# --- 2. CACHING & DATABASE ---
 @st.cache_resource
 def get_database_client():
     if "gcp_service_account" not in st.secrets:
         return None
     try:
         creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-        # Standard client, cached globally so it never blocks page threads
         return firestore.Client(credentials=creds)
-    except Exception as e:
+    except Exception:
         return None
 
 db_client = get_database_client()
 
-# --- CACHE DATA FETCHING ---
 def load_data():
     fallback_data = {"materials": {}, "recipes": {}, "orders": {}}
-    if db_client is None:
-        return fallback_data
+    if db_client is None: return fallback_data
     try:
-        doc_ref = db_client.collection("bakery").document("data")
-        doc = doc_ref.get()
-        if doc.exists:
-            fetched = doc.to_dict()
-            return fetched if fetched else fallback_data
-    except Exception as e:
-        pass
-    return fallback_data
+        doc = db_client.collection("bakery").document("data").get()
+        return doc.to_dict() if doc.exists else fallback_data
+    except Exception: return fallback_data
 
 def save_data(updated_data):
     st.session_state.bakery_data = updated_data
-    if db_client is not None:
+    if db_client:
         try:
-            doc_ref = db_client.collection("bakery").document("data")
-            doc_ref.set(updated_data)
+            db_client.collection("bakery").document("data").set(updated_data)
         except Exception as e:
-            st.error(f"❌ Save Failed: {e}")
+            st.error(f"Save Failed: {e}")
 
-# Initialize session state data structure
 if "bakery_data" not in st.session_state:
     st.session_state.bakery_data = load_data()
 
 data = st.session_state.bakery_data
 
-# Double-check structure integrity
-if "orders" not in data: data["orders"] = {}
-if "recipes" not in data: data["recipes"] = {}
-if "materials" not in data: data["materials"] = {}
-
+# --- 3. HELPERS ---
 LOGO_FILE = "whiskybusiness.jpg"
 
 def get_base64_image(img_path):
@@ -63,9 +53,7 @@ def get_base64_image(img_path):
             return base64.b64encode(f.read()).decode()
     return ""
 
-# --- BRANDING & THEMING ---
-st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
-
+# --- 4. UI SETUP ---
 st.markdown("""
     <style>
         .stButton>button:first-child { background-color: #a3c9c1; color: white; border: none; }
@@ -79,21 +67,14 @@ with st.sidebar:
         st.image(LOGO_FILE, use_container_width=True)
     else:
         st.title("🧁 Whisk-y Business")
-    st.write("---")
-    menu = st.selectbox(
-        "Navigation", 
-        ["Manage Materials", "Build Recipes & Templates", "Order Tracker", "Generate Invoice"]
-    )
+    menu = st.selectbox("Navigation", ["Manage Materials", "Build Recipes & Templates", "Order Tracker", "Generate Invoice"])
 
 def calculate_recipe_cost(recipe_name):
-    if recipe_name not in data["recipes"]:
-        return 0.0
     total_cost = 0
-    for item, qty in data["recipes"][recipe_name].items():
+    for item, qty in data["recipes"].get(recipe_name, {}).items():
         if item in data["materials"]:
             total_cost += data["materials"][item]["unit_cost"] * qty
     return total_cost
-
 # -------------------------------------------------------------------
 # 1. MANAGE MATERIALS
 # -------------------------------------------------------------------
