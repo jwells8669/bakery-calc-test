@@ -10,7 +10,7 @@ from google.oauth2 import service_account
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
 
 # 2. STRICT WHITELIST
-ALLOWED_USERS = ["jwells8669@gmail.com", "rosawe4lls14@gmail.com"]
+ALLOWED_USERS = ["jwells8669@gmail.com", "rosawells14@gmail.com"]
 
 # 3. CLEAN IDENTITY DISCOVERY GATING
 if not st.user.is_logged_in:
