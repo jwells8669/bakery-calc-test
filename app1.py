@@ -1,22 +1,24 @@
 import streamlit as st
 import json
 import os
-import requests  # This is for your data calls
+import requests
 from datetime import datetime
 import base64
 from google.oauth2 import service_account
-from google.auth.transport.requests import Request as GoogleRequest # Explicit rename
+from google.auth.transport.requests import Request as AuthRequest 
 import streamlit.components.v1 as components
 
+# --- 1. CONFIG & SETUP ---
+st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁", layout="wide")
+
+# --- 2. AUTHENTICATION ---
 def get_token():
     creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-    # Use the GoogleRequest we imported above
-    auth_request = GoogleRequest() 
+    # Using our renamed AuthRequest to avoid the conflict
+    auth_request = AuthRequest()
     scoped_creds = creds.with_scopes(['https://www.googleapis.com/auth/datastore'])
     scoped_creds.refresh(auth_request)
     return scoped_creds.token
-# --- 1. CONFIG & SETUP ---
-st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁", layout="wide")
 
 # Replace YOUR_PROJECT_ID with your actual Firebase Project ID
 DB_URL = "https://firestore.googleapis.com/v1/projects/YOUR_PROJECT_ID/databases/(default)/documents/bakery/data"
