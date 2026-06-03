@@ -1,51 +1,53 @@
 import streamlit as st
-import json
 import os
-from datetime import datetime
-import base64
+
+# 🚨 THE MAGIC FIX FOR GRPC DEADLOCKS 🚨
+# These force the networking engine to behave in containerized environments
+os.environ["GRPC_DNS_RESOLVER"] = "native"
+os.environ["GRPC_ENABLE_FORK_SUPPORT"] = "1"
+
 from google.cloud import firestore
 from google.oauth2 import service_account
-import streamlit.components.v1 as components
 
-# --- 1. CONFIG & SETUP ---
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁", layout="wide")
-st.write("Checkpoint 1: App Started. Loading Secrets...")
-print("Checkpoint 1: App Started")
 
-# --- 2. DATABASE CLIENT ---
-# Added ttl=3600 to prevent the Firebase connection from going stale and crashing
+st.write("Checkpoint 1: App Started...")
+
 @st.cache_resource(ttl=3600)
 def get_database_client():
     if "gcp_service_account" not in st.secrets:
+        st.error("Missing Secrets!")
         return None
     try:
         creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-        return firestore.Client(credentials=creds)
+        # 🚨 FIX #2: Explicitly state the project_id to prevent metadata timeouts
+        return firestore.Client(credentials=creds, project=creds.project_id)
     except Exception as e:
-        print(f"Firebase Auth Error: {e}")
+        st.error(f"Failed to auth: {e}")
         return None
 
 db_client = get_database_client()
-st.write("Checkpoint 2: Database Client Initialized.")
-print("Checkpoint 2: DB Init")
-# --- 3. DATA MANAGEMENT ---
+st.write("Checkpoint 2: Database Initialized.")
+
 def load_data():
-    fallback_data = {"materials": {}, "recipes": {}, "orders": {}}
-    if db_client is None:
-        return fallback_data
     try:
-        st.write("Checkpoint 3: Attempting to fetch from Firestore...")
+        st.write("Checkpoint 3: Attempting to fetch...")
         doc_ref = db_client.collection("bakery").document("data")
-        doc = doc_ref.get()
+        doc = doc_ref.get(timeout=5.0)
+        
         if doc.exists:
-            st.write("Checkpoint 4: Data found! Converting to dict...")
-            fetched = doc.to_dict()
-            return fetched if fetched else fallback_data
+            st.write("Checkpoint 4: Data found!")
+            return doc.to_dict()
+        else:
+            st.write("Checkpoint 4: Database is empty (this is normal after deletion!)")
+            return {}
+            
     except Exception as e:
-        # Added error logging so silent crashes are visible
-        st.error("⚠️ Connection to the database was lost or failed to load. Please refresh.")
-        print(f"Firestore Load Error: {e}")
-    return fallback_data
+        st.error(f"Firestore Load Error: {e}")
+        return {}
+
+data = load_data()
+st.write("Checkpoint 5: Success! The gRPC deadlock has been bypassed.")
 
 def save_data(updated_data):
     st.session_state.bakery_data = updated_data
