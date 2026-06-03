@@ -3,37 +3,98 @@ import json
 import os
 from datetime import datetime
 import base64
+import requests
 from google.cloud import firestore
 from google.oauth2 import service_account
 
-# 1. MUST BE FIRST: Page Configuration
+# Set page config at the absolute entry point
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
 
-# 2. STRICT WHITELIST
-ALLOWED_USERS = ["jwells8669@gmail.com", "rosawells14@gmail.com"]
+ALLOWED_USERS = ["jwells8669@gmail.com", "rosawe4lls14@gmail.com"]
 
-# 3. CLEAN IDENTITY DISCOVERY GATING
-if not st.user.is_logged_in:
+# Extract config cleanly from the main secrets table
+CLIENT_ID = st.secrets["auth"]["client_id"]
+CLIENT_SECRET = st.secrets["auth"]["client_secret"]
+REDIRECT_URI = st.secrets["auth"]["redirect_uri"]
+
+# --- CUSTOM MANUAL OAUTH ENGINE ---
+def get_google_auth_url():
+    """Generates a raw, unthrottled login request link directly to Google"""
+    base_url = "https://accounts.google.com/o/oauth2/v2/auth"
+    params = {
+        "client_id": CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "online",
+        "prompt": "select_account"
+    }
+    query_string = "&".join([f"{k}={requests.utils.quote(v)}" for k, v in params.items()])
+    return f"{base_url}?{query_string}"
+
+def get_user_email_from_code(auth_code):
+    """Exchanges the raw browser landing authorization code for user identity profile"""
+    token_url = "https://oauth2.googleapis.com/token"
+    payload = {
+        "code": auth_code,
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "redirect_uri": REDIRECT_URI,
+        "grant_type": "authorization_code"
+    }
+    try:
+        res = requests.post(token_url, data=payload, timeout=10)
+        tokens = res.json()
+        if "access_token" in tokens:
+            # Query userinfo endpoint with our fresh access token
+            userinfo_url = "https://www.googleapis.com/oauth2/v3/userinfo"
+            headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+            user_res = requests.get(userinfo_url, headers=headers, timeout=10)
+            return user_res.json().get("email", "").lower()
+    except Exception:
+        pass
+    return None
+
+# --- INITIALIZE CORE SESSION FLAGS ---
+if "auth_email" not in st.session_state:
+    st.session_state.auth_email = None
+
+# Trap the code sent back from Google inside the browser address bar query strings
+query_params = st.query_params
+if "code" in query_params and not st.session_state.auth_email:
+    landing_code = query_params["code"]
+    verified_email = get_user_email_from_code(landing_code)
+    if verified_email:
+        st.session_state.auth_email = verified_email
+        st.query_params.clear() # Wipe parameters to clean up the browser address view URL bar
+        st.rerun()
+
+# --- SECURITY APP GATE ---
+if not st.session_state.auth_email:
     st.title("🧁 Whisk-y Business Hub")
     st.write("Welcome! This application contains sensitive business inventory and client invoice logs.")
-    st.info("Please log in with an authorized Google Workspace / Gmail account to proceed.")
-    if st.button("Log in with Google", type="primary"):
-        st.login("google")  # <--- MUST HAVE "google" PASSED INSIDE THE QUOTES
+    st.info("Please log in with an authorized Google account to proceed.")
+    
+    # Render a completely clean, native HTML link button styled precisely like Streamlit
+    login_url = get_google_auth_url()
+    st.markdown(f"""
+        <a href="{login_url}" target="_self" style="text-decoration:none;">
+            <div style="background-color:#a3c9c1; color:white; padding:10px 20px; text-align:center; border-radius:5px; font-weight:bold; cursor:pointer; display:inline-block;">
+                🔑 Log in with Google Account
+            </div>
+        </a>
+    """, unsafe_allow_html=True)
     st.stop()
 
-# 4. CAPTURE LOGGED-IN EMAIL SECURELY
-user_email = st.user.email.lower()
+user_email = st.session_state.auth_email
 
 if user_email not in ALLOWED_USERS:
     st.title("🚫 Access Denied")
-    st.error(f"The Google account '{user_email}' is not authorized to access this system.")
-    if st.button("Log out / Switch Accounts"):
-        st.logout()
+    st.error(f"The account '{user_email}' is not authorized to access this hub.")
+    if st.button("🔄 Try Alternative Account Log In"):
+        st.session_state.auth_email = None
+        st.rerun()
     st.stop()
-
-# -------------------------------------------------------------------
-# Everything below stays exactly the same (Firestore client, UI tabs, etc.)
-# -------------------------------------------------------------------
 # -------------------------------------------------------------------
 # 🗄️ SAFELY CACHE FIRESTORE CONNECTION
 # -------------------------------------------------------------------
