@@ -13,16 +13,16 @@ st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
 ALLOWED_USERS = ["jwells8669@gmail.com", "rosawe4lls14@gmail.com"]
 
 # 3. CLEAN IDENTITY DISCOVERY GATING
-if not st.experimental_user.is_logged_in:
+if not st.user.is_logged_in:
     st.title("🧁 Whisk-y Business Hub")
     st.write("Welcome! This application contains sensitive business inventory and client invoice logs.")
     st.info("Please log in with an authorized Google Workspace / Gmail account to proceed.")
     if st.button("Log in with Google", type="primary"):
-        st.login()  # Streamlit auto-detects the provider from your flat secrets layout
+        st.login()  # Streamlit auto-detects from your flat secrets layout
     st.stop()
 
 # 4. CAPTURE LOGGED-IN EMAIL SECURELY
-user_email = st.experimental_user.email.lower()
+user_email = st.user.email.lower()
 
 if user_email not in ALLOWED_USERS:
     st.title("🚫 Access Denied")
