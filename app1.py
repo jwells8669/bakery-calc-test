@@ -3,19 +3,37 @@ import json
 import os
 from datetime import datetime
 import base64
+from google.cloud import firestore
+from google.oauth2 import service_account
 
-DATA_FILE = "bakery_data.json"
+# --- DATABASE SETUP (FIRESTORE) ---
+# Authenticate using the Streamlit Secrets you saved
+try:
+    creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+    db_client = firestore.Client(credentials=creds)
+except Exception as e:
+    st.error("Database connection failed. Please check your Streamlit Secrets configuration.")
+    st.stop()
+
 LOGO_FILE = "whiskybusiness.jpg"
 
 def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
+    try:
+        doc_ref = db_client.collection("bakery").document("data")
+        doc = doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+    except Exception as e:
+        st.error(f"Error loading data from database: {e}")
+    # Default fallback if database document doesn't exist yet
     return {"materials": {}, "recipes": {}, "orders": {}}
 
 def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    try:
+        doc_ref = db_client.collection("bakery").document("data")
+        doc_ref.set(data)
+    except Exception as e:
+        st.error(f"Error saving data to database: {e}")
 
 def get_base64_image(img_path):
     if os.path.exists(img_path):
@@ -23,12 +41,15 @@ def get_base64_image(img_path):
             return base64.b64encode(f.read()).decode()
     return ""
 
+# Initialize and pull fresh data from Firestore
 data = load_data()
 
 if "orders" not in data:
     data["orders"] = {}
 if "recipes" not in data:
     data["recipes"] = {}
+if "materials" not in data:
+    data["materials"] = {}
 
 # --- BRANDING & THEMING ---
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
@@ -249,19 +270,15 @@ elif menu == "Build Recipes & Templates":
                             # --- NATIVE REORDER ARROWS ---
                             btn_col1, btn_col2 = ing_cols[0].columns(2)
                             
-                            # Up arrow button (hidden or disabled for the top item)
                             if idx > 0:
                                 if btn_col1.button("🔼", key=f"up_{new_recipe_name}_{ing_item}"):
-                                    # Swap current item with the previous one
                                     items_list[idx], items_list[idx-1] = items_list[idx-1], items_list[idx]
                                     data["recipes"][new_recipe_name] = {k: ingredients_dict[k] for k in items_list}
                                     save_data(data)
                                     st.rerun()
                                     
-                            # Down arrow button (hidden or disabled for the last item)
                             if idx < len(items_list) - 1:
                                 if btn_col2.button("🔽", key=f"down_{new_recipe_name}_{ing_item}"):
-                                    # Swap current item with the next one
                                     items_list[idx], items_list[idx+1] = items_list[idx+1], items_list[idx]
                                     data["recipes"][new_recipe_name] = {k: ingredients_dict[k] for k in items_list}
                                     save_data(data)
@@ -282,7 +299,6 @@ elif menu == "Build Recipes & Templates":
                                 updated_ingredients[ing_item] = ing_qty
                                 
                             if ing_cols[3].button("❌ Remove", key=f"drop_ing_{new_recipe_name}_{ing_item}", use_container_width=True):
-                                # Re-construct array removing the item entirely
                                 remaining_items = [i for i in items_list if i != ing_item]
                                 data["recipes"][new_recipe_name] = {k: ingredients_dict[k] for k in remaining_items}
                                 save_data(data)
@@ -292,7 +308,6 @@ elif menu == "Build Recipes & Templates":
                         st.markdown("**➕ Add an extra ingredient to this template:**")
                         add_ing_cols = st.columns([3, 2, 1.5])
                         
-                        # Use the current state of items_list to determine available items
                         available_mats = [m for m in data["materials"].keys() if m not in ingredients_dict]
                         
                         if available_mats:
@@ -300,13 +315,11 @@ elif menu == "Build Recipes & Templates":
                             qty_to_add = add_ing_cols[1].number_input("Qty to Add", min_value=0.001, format="%.3f", key=f"add_mat_qty_{new_recipe_name}", label_visibility="collapsed")
                             
                             if add_ing_cols[2].button("➕ Add", key=f"add_mat_btn_{new_recipe_name}", use_container_width=True):
-                                # Append to the end of the existing ordered dictionary
                                 data["recipes"][new_recipe_name][mat_to_add] = qty_to_add
                                 save_data(data)
                                 st.rerun()
                         
                         if has_changes:
-                            # Apply updated values keeping the current exact keys sequence intact
                             ordered_updated = {}
                             for k in items_list:
                                 if k in updated_ingredients:
