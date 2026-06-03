@@ -1,25 +1,19 @@
-
 import streamlit as st
 import json
 import os
 from datetime import datetime
 import base64
-import requests
 from google.cloud import firestore
 from google.oauth2 import service_account
 
-# Set page config at the absolute entry point
-st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
-
-# -------------------------------------------------------------------
-# 🗄️ SAFELY CACHE FIRESTORE CONNECTION
-# -------------------------------------------------------------------
+# --- SAFELY CACHE FIRESTORE CONNECTION ---
 @st.cache_resource
 def get_database_client():
     if "gcp_service_account" not in st.secrets:
         return None
     try:
         creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+        # Standard client, cached globally so it never blocks page threads
         return firestore.Client(credentials=creds)
     except Exception as e:
         return None
@@ -68,7 +62,6 @@ def get_base64_image(img_path):
         with open(img_path, "rb") as f:
             return base64.b64encode(f.read()).decode()
     return ""
-
 
 # -------------------------------------------------------------------
 # 🎨 BRANDING & THEMING
