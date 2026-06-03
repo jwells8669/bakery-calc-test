@@ -7,10 +7,10 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 import streamlit.components.v1 as components
 
-# --- 1. MUST BE FIRST ---
+# --- 1. CONFIG & SETUP ---
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁", layout="wide")
 
-# --- 2. CACHING & DATABASE ---
+# --- 2. DATABASE CLIENT ---
 @st.cache_resource
 def get_database_client():
     if "gcp_service_account" not in st.secrets:
@@ -18,33 +18,47 @@ def get_database_client():
     try:
         creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
         return firestore.Client(credentials=creds)
-    except Exception:
+    except Exception as e:
         return None
 
 db_client = get_database_client()
 
+# --- 3. DATA MANAGEMENT ---
 def load_data():
     fallback_data = {"materials": {}, "recipes": {}, "orders": {}}
-    if db_client is None: return fallback_data
+    if db_client is None:
+        return fallback_data
     try:
-        doc = db_client.collection("bakery").document("data").get()
-        return doc.to_dict() if doc.exists else fallback_data
-    except Exception: return fallback_data
+        doc_ref = db_client.collection("bakery").document("data")
+        doc = doc_ref.get()
+        if doc.exists:
+            fetched = doc.to_dict()
+            return fetched if fetched else fallback_data
+    except Exception:
+        pass
+    return fallback_data
 
 def save_data(updated_data):
     st.session_state.bakery_data = updated_data
-    if db_client:
+    if db_client is not None:
         try:
-            db_client.collection("bakery").document("data").set(updated_data)
+            doc_ref = db_client.collection("bakery").document("data")
+            doc_ref.set(updated_data)
         except Exception as e:
-            st.error(f"Save Failed: {e}")
+            st.error(f"❌ Save Failed: {e}")
 
+# Initialize Session State
 if "bakery_data" not in st.session_state:
     st.session_state.bakery_data = load_data()
 
 data = st.session_state.bakery_data
 
-# --- 3. HELPERS ---
+# Ensure data structure
+if "orders" not in data: data["orders"] = {}
+if "recipes" not in data: data["recipes"] = {}
+if "materials" not in data: data["materials"] = {}
+
+# --- 4. HELPERS ---
 LOGO_FILE = "whiskybusiness.jpg"
 
 def get_base64_image(img_path):
@@ -53,7 +67,7 @@ def get_base64_image(img_path):
             return base64.b64encode(f.read()).decode()
     return ""
 
-# --- 4. UI SETUP ---
+# --- 5. UI & BRANDING ---
 st.markdown("""
     <style>
         .stButton>button:first-child { background-color: #a3c9c1; color: white; border: none; }
@@ -75,6 +89,7 @@ def calculate_recipe_cost(recipe_name):
         if item in data["materials"]:
             total_cost += data["materials"][item]["unit_cost"] * qty
     return total_cost
+    
 # -------------------------------------------------------------------
 # 1. MANAGE MATERIALS
 # -------------------------------------------------------------------
