@@ -1,3 +1,3 @@
 streamlit
-google-cloud-firestore==2.19.0
-urllib3<2
+requests
+google-auth
