@@ -6,37 +6,34 @@ import base64
 from google.cloud import firestore
 from google.oauth2 import service_account
 
-# -------------------------------------------------------------------
-# 🔒 GOOGLE AUTHENTICATION LAYER (RESTRICTED ACCESS)
-# -------------------------------------------------------------------
-
-# Explicitly authorized users allowed to enter the hub
-ALLOWED_USERS = ["jwells8669@gmail.com", "rosawe4lls14@gmail.com"]
-
-# Set page config at the very entry point of the script
+# 1. MUST BE FIRST: Page Configuration
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
 
-# Check if the user is logged into Streamlit's native identity system
-if not st.user.is_logged_in:
+# 2. STRICT WHITELIST
+ALLOWED_USERS = ["jwells8669@gmail.com", "rosawe4lls14@gmail.com"]
+
+# 3. CLEAN IDENTITY DISCOVERY GATING
+if not st.experimental_user.is_logged_in:
     st.title("🧁 Whisk-y Business Hub")
     st.write("Welcome! This application contains sensitive business inventory and client invoice logs.")
     st.info("Please log in with an authorized Google Workspace / Gmail account to proceed.")
     if st.button("Log in with Google", type="primary"):
-        st.login(provider="google")
-    st.stop()  # Abort page rendering immediately for unauthenticated users
+        st.login()  # Streamlit auto-detects the provider from your flat secrets layout
+    st.stop()
 
-# Verify if the logged-in email matches the strict whitelist
-user_email = st.user.email.lower()
+# 4. CAPTURE LOGGED-IN EMAIL SECURELY
+user_email = st.experimental_user.email.lower()
 
 if user_email not in ALLOWED_USERS:
     st.title("🚫 Access Denied")
     st.error(f"The Google account '{user_email}' is not authorized to access this system.")
-    st.write("If you need access, please contact the administrator to whitelist this email address.")
     if st.button("Log out / Switch Accounts"):
         st.logout()
-    st.stop()  # Abort page rendering immediately for unauthorized users
+    st.stop()
 
-
+# -------------------------------------------------------------------
+# Everything below stays exactly the same (Firestore client, UI tabs, etc.)
+# -------------------------------------------------------------------
 # -------------------------------------------------------------------
 # 🗄️ SAFELY CACHE FIRESTORE CONNECTION
 # -------------------------------------------------------------------
