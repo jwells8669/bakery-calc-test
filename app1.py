@@ -104,7 +104,7 @@ if menu == "Manage Materials":
         with col1:
             bulk_cost = st.number_input("Bulk Cost ($)", min_value=0.00, step=0.01, format="%.2f")
         with col2:
-            bulk_qty = st.number_input("Bulk Quantity", min_value=0.01, step=0.01)
+            bulk_qty = st.number_input("Bulk Quantity", min_value=0.01, step=0.01, value=1.0)
         with col3:
             unit = st.text_input("Unit (e.g., g, piece, ml)").strip()
             
@@ -183,7 +183,7 @@ elif menu == "Build Recipes & Templates":
                 st.session_state.current_recipe_items = {}
                 
             selected_mat = st.selectbox("Select Material", sorted(list(data["materials"].keys())), key="new_recipe_mat")
-            qty_needed = st.number_input(f"Amount Needed ({data['materials'][selected_mat]['unit']})", min_value=0.001, format="%.3f", key="new_recipe_qty")
+            qty_needed = st.number_input(f"Amount Needed ({data['materials'][selected_mat]['unit']})", min_value=0.001, format="%.3f", key="new_recipe_qty", value=1.0)
             
             if st.button("Add Item to Template", key="add_item_new_btn"):
                 st.session_state.current_recipe_items[selected_mat] = qty_needed
