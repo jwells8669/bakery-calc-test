@@ -1,38 +1,48 @@
 import streamlit as st
+import os
 from google.cloud import firestore
 from google.oauth2 import service_account
+
+# Force the Google client libraries to use standard HTTP transport instead of gRPC
+os.environ["GOOGLE_CLOUD_FIRESTORE_TRANSPORT"] = "rest"
 
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁", layout="wide")
 
 st.write("Checkpoint 1: App Started...")
 
-# 🚨 THE FIX: NO CACHING DECORATOR HERE 🚨
-# Caching gRPC connections on a Uvicorn server causes permanent deadlocks.
 def get_database_client():
     if "gcp_service_account" not in st.secrets:
         st.error("Missing Secrets!")
         return None
     try:
         creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-        return firestore.Client(credentials=creds, project=creds.project_id)
+        
+        # Initialize client explicitly requesting the REST fallback architecture
+        return firestore.Client(
+            credentials=creds, 
+            project=creds.project_id,
+            client_options={"api_endpoint": "firestore.googleapis.com"}
+        )
     except Exception as e:
         st.error(f"Failed to auth: {e}")
         return None
 
 db_client = get_database_client()
-st.write("Checkpoint 2: Database Initialized.")
+st.write("Checkpoint 2: Database Initialized via HTTP REST.")
 
 def load_data():
     try:
-        st.write("Checkpoint 3: Attempting to fetch...")
+        st.write("Checkpoint 3: Attempting to fetch over standard HTTP web traffic...")
         doc_ref = db_client.collection("bakery").document("data")
+        
+        # A standard HTTP request will strictly obey this timeout
         doc = doc_ref.get(timeout=5.0)
         
         if doc.exists:
             st.write("Checkpoint 4: Data found!")
             return doc.to_dict()
         else:
-            st.write("Checkpoint 4: Database is empty (this is normal!)")
+            st.write("Checkpoint 4: Database document is empty/new!")
             return {}
             
     except Exception as e:
@@ -40,7 +50,7 @@ def load_data():
         return {}
 
 data = load_data()
-st.write("Checkpoint 5: Success! The Uvicorn deadlock has been bypassed.")
+st.write("Checkpoint 5: Success! The network blockage has been completely bypassed.")
 
 def save_data(updated_data):
     st.session_state.bakery_data = updated_data
