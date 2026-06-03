@@ -1,3 +1,4 @@
+
 import streamlit as st
 import json
 import os
@@ -10,28 +11,27 @@ from google.oauth2 import service_account
 # Set page config at the absolute entry point
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
 
-ALLOWED_USERS = ["jwells8669@gmail.com", "rosawe4lls14@gmail.com"]
+# FIX: Corrected email address typo here
+ALLOWED_USERS = ["jwells8669@gmail.com", "rosawells14@gmail.com"]
 
-# Extract config cleanly from secrets table
-CLIENT_ID = st.secrets["auth"]["client_id"]
+# Extract config cleanly
 CLIENT_SECRET = st.secrets["auth"]["client_secret"]
-REDIRECT_URI = st.secrets["auth"]["redirect_uri"]
+REDIRECT_URI = "https://bakery-calc-test-ghj4p2fraxlpvpljfznpxb.streamlit.app/"
 
-# --- CUSTOM MANUAL OAUTH ENGINE ---
+# --- HARDCODED MANUAL OAUTH ENGINE ---
 def get_google_auth_url():
-    """Generates a strict, Google-compliant login request link"""
+    """Generates a perfectly flat, clean connection request to Google"""
+    client_id = "611354388785-gaghsqtsna4rc08e9atqf3jkti4gvm4g.apps.googleusercontent.com"
     base_url = "https://accounts.google.com/o/oauth2/v2/auth"
-    # Strict URL encoding to prevent Google 403 parameter rejections
-    params = {
-        "client_id": CLIENT_ID,
-        "redirect_uri": REDIRECT_URI,
-        "response_type": "code",
-        "scope": "openid+email+profile",  # Google preferred explicit separator
-        "access_type": "online",
-        "prompt": "select_account"
-    }
-    # Manually assemble to prevent libraries from breaking the scope plus signs
-    query_string = f"client_id={params['client_id']}&redirect_uri={params['redirect_uri']}&response_type={params['response_type']}&scope=openid%20email%20profile&access_type={params['access_type']}&prompt={params['prompt']}"
+    
+    query_string = (
+        f"client_id={client_id}"
+        f"&redirect_uri={REDIRECT_URI}"
+        f"&response_type=code"
+        f"&scope=openid%20email%20profile"
+        f"&access_type=online"
+        f"&prompt=select_account"
+    )
     return f"{base_url}?{query_string}"
 
 def get_user_email_from_code(auth_code):
@@ -39,7 +39,7 @@ def get_user_email_from_code(auth_code):
     token_url = "https://oauth2.googleapis.com/token"
     payload = {
         "code": auth_code,
-        "client_id": CLIENT_ID,
+        "client_id": "611354388785-gaghsqtsna4rc08e9atqf3jkti4gvm4g.apps.googleusercontent.com",
         "client_secret": CLIENT_SECRET,
         "redirect_uri": REDIRECT_URI,
         "grant_type": "authorization_code"
@@ -67,7 +67,7 @@ if "code" in query_params and not st.session_state.auth_email:
     verified_email = get_user_email_from_code(landing_code)
     if verified_email:
         st.session_state.auth_email = verified_email
-        st.query_params.clear() # Wipe parameters to clean up the browser address view URL bar
+        st.query_params.clear() 
         st.rerun()
 
 # --- SECURITY APP GATE ---
