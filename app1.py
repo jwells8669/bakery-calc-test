@@ -9,9 +9,12 @@ import streamlit.components.v1 as components
 
 # --- 1. CONFIG & SETUP ---
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁", layout="wide")
+st.write("Checkpoint 1: App Started. Loading Secrets...")
+print("Checkpoint 1: App Started")
 
 # --- 2. DATABASE CLIENT ---
-@st.cache_resource(ttl=1200)
+# Added ttl=3600 to prevent the Firebase connection from going stale and crashing
+@st.cache_resource(ttl=3600)
 def get_database_client():
     if "gcp_service_account" not in st.secrets:
         return None
@@ -19,25 +22,29 @@ def get_database_client():
         creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
         return firestore.Client(credentials=creds)
     except Exception as e:
+        print(f"Firebase Auth Error: {e}")
         return None
 
 db_client = get_database_client()
-
+st.write("Checkpoint 2: Database Client Initialized.")
+print("Checkpoint 2: DB Init")
 # --- 3. DATA MANAGEMENT ---
 def load_data():
     fallback_data = {"materials": {}, "recipes": {}, "orders": {}}
     if db_client is None:
         return fallback_data
     try:
+        st.write("Checkpoint 3: Attempting to fetch from Firestore...")
         doc_ref = db_client.collection("bakery").document("data")
         doc = doc_ref.get()
         if doc.exists:
+            st.write("Checkpoint 4: Data found! Converting to dict...")
             fetched = doc.to_dict()
             return fetched if fetched else fallback_data
     except Exception as e:
-        # Show an error message instead of silently failing
-        st.error("⚠️ Connection to the database was lost. Please refresh the page.")
-        print(f"Firestore Load Error: {e}") 
+        # Added error logging so silent crashes are visible
+        st.error("⚠️ Connection to the database was lost or failed to load. Please refresh.")
+        print(f"Firestore Load Error: {e}")
     return fallback_data
 
 def save_data(updated_data):
@@ -52,6 +59,11 @@ def save_data(updated_data):
 # Initialize Session State
 if "bakery_data" not in st.session_state:
     st.session_state.bakery_data = load_data()
+st.write("Checkpoint 5: Data successfully loaded into Session State!")
+st.write(st.session_state.bakery_data) # Let's see what is actually in it
+print("Checkpoint 5: Success")
+
+st.write("If you can read this, the data loading is NOT the problem.")
 
 data = st.session_state.bakery_data
 
@@ -155,7 +167,6 @@ if menu == "Manage Materials":
                 
             calculated_unit_cost = new_cost / (new_qty if new_qty > 0 else 1.0)
             
-            # FIXED: Strict float casting to prevent infinite loops, and removed st.rerun()
             if (new_name != k or new_cat != m["category"] or float(new_cost) != float(m["bulk_cost"]) or float(new_qty) != float(m["bulk_qty"]) or new_unit != m["unit"]):
                 if new_name != k and k in data["materials"]:
                     del data["materials"][k]
@@ -300,7 +311,6 @@ elif menu == "Build Recipes & Templates":
                                 "Qty", min_value=0.001, format="%.3f", value=float(ing_qty), key=f"edit_qty_{new_recipe_name}_{ing_item}", label_visibility="collapsed"
                             )
                             
-                            # FIXED: Strict float casting
                             if float(new_ing_qty) != float(ing_qty):
                                 updated_ingredients[ing_item] = float(new_ing_qty)
                                 has_changes = True
@@ -328,7 +338,6 @@ elif menu == "Build Recipes & Templates":
                                 save_data(data)
                                 st.rerun()
                         
-                        # FIXED: Removed the st.rerun() from here
                         if has_changes:
                             ordered_updated = {}
                             for k in items_list:
