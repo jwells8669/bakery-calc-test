@@ -18,20 +18,23 @@ ALLOWED_USERS = ["jwells8669@gmail.com", "rosawells14@gmail.com"]
 CLIENT_SECRET = st.secrets["auth"]["client_secret"]
 REDIRECT_URI = "https://bakery-calc-test-ghj4p2fraxlpvpljfznpxb.streamlit.app/"
 
-# --- HARDCODED MANUAL OAUTH ENGINE ---
+from urllib.parse import urlencode
+
 def get_google_auth_url():
-    """Generates a perfectly flat, clean connection request to Google"""
-    client_id = "611354388785-gaghsqtsna4rc08e9atqf3jkti4gvm4g.apps.googleusercontent.com"
+    """Generates a perfectly safe, url-encoded connection request to Google"""
     base_url = "https://accounts.google.com/o/oauth2/v2/auth"
     
-    query_string = (
-        f"client_id={client_id}"
-        f"&redirect_uri={REDIRECT_URI}"
-        f"&response_type=code"
-        f"&scope=openid%20email%20profile"
-        f"&access_type=online"
-        f"&prompt=select_account"
-    )
+    params = {
+        "client_id": "611354388785-gaghsqtsna4rc08e9atqf3jkti4gvm4g.apps.googleusercontent.com",
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",  # Normal spaces here; urlencode handles the rest safely
+        "access_type": "online",
+        "prompt": "select_account"
+    }
+    
+    # Safely encodes spaces to '+' or '%20' based on strict RFC standards
+    query_string = urlencode(params)
     return f"{base_url}?{query_string}"
 
 def get_user_email_from_code(auth_code):
