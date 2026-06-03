@@ -6,14 +6,45 @@ import base64
 from google.cloud import firestore
 from google.oauth2 import service_account
 
-# --- SAFELY CACHE FIRESTORE CONNECTION ---
+# -------------------------------------------------------------------
+# 🔒 GOOGLE AUTHENTICATION LAYER (RESTRICTED ACCESS)
+# -------------------------------------------------------------------
+
+# Explicitly authorized users allowed to enter the hub
+ALLOWED_USERS = ["jwells8669@gmail.com", "rosawe4lls14@gmail.com"]
+
+# Check if the user is logged into Streamlit's native identity system
+if not st.user.is_logged_in:
+    st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
+    st.title("🧁 Whisk-y Business Hub")
+    st.write("Welcome! This application contains sensitive business inventory and client invoice logs.")
+    st.info("Please log in with an authorized Google Workspace / Gmail account to proceed.")
+    if st.button("Log in with Google", type="primary"):
+        st.login()
+    st.stop()  # Abort page rendering immediately for unauthenticated users
+
+# Verify if the logged-in email matches the strict whitelist
+user_email = st.user.email.lower()
+
+if user_email not in ALLOWED_USERS:
+    st.set_page_config(page_title="Access Denied", page_icon="🚫")
+    st.title("🚫 Access Denied")
+    st.error(f"The Google account '{user_email}' is not authorized to access this system.")
+    st.write("If you need access, please contact the administrator to whitelist this email address.")
+    if st.button("Log out / Switch Accounts"):
+        st.logout()
+    st.stop()  # Abort page rendering immediately for unauthorized users
+
+
+# -------------------------------------------------------------------
+# 🗄️ SAFELY CACHE FIRESTORE CONNECTION
+# -------------------------------------------------------------------
 @st.cache_resource
 def get_database_client():
     if "gcp_service_account" not in st.secrets:
         return None
     try:
         creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-        # Standard client, cached globally so it never blocks page threads
         return firestore.Client(credentials=creds)
     except Exception as e:
         return None
@@ -63,7 +94,10 @@ def get_base64_image(img_path):
             return base64.b64encode(f.read()).decode()
     return ""
 
-# --- BRANDING & THEMING ---
+
+# -------------------------------------------------------------------
+# 🎨 BRANDING & THEMING
+# -------------------------------------------------------------------
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
 
 st.markdown("""
@@ -79,6 +113,13 @@ with st.sidebar:
         st.image(LOGO_FILE, use_container_width=True)
     else:
         st.title("🧁 Whisk-y Business")
+    
+    # Show active logged-in user context identity
+    st.caption(f"Authenticated as: **{user_email}**")
+    
+    if st.button("🚪 Log Out System", use_container_width=True):
+        st.logout()
+        
     st.write("---")
     menu = st.selectbox(
         "Navigation", 
@@ -93,6 +134,7 @@ def calculate_recipe_cost(recipe_name):
         if item in data["materials"]:
             total_cost += data["materials"][item]["unit_cost"] * qty
     return total_cost
+
 
 # -------------------------------------------------------------------
 # 1. MANAGE MATERIALS
@@ -166,6 +208,7 @@ if menu == "Manage Materials":
                 }
                 save_data(data)
                 st.rerun()
+
 
 # -------------------------------------------------------------------
 # 2. BUILD RECIPES & TEMPLATES
@@ -339,6 +382,7 @@ elif menu == "Build Recipes & Templates":
                             st.rerun()
                     st.write("---")
 
+
 # -------------------------------------------------------------------
 # 3. ORDER TRACKER
 # -------------------------------------------------------------------
@@ -451,6 +495,7 @@ elif menu == "Order Tracker":
                         del data["orders"][o_id]
                         save_data(data)
                         st.rerun()
+
 
 # -------------------------------------------------------------------
 # 4. GENERATE INVOICE
