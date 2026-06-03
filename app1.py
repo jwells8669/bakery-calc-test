@@ -18,7 +18,7 @@ if not st.user.is_logged_in:
     st.write("Welcome! This application contains sensitive business inventory and client invoice logs.")
     st.info("Please log in with an authorized Google Workspace / Gmail account to proceed.")
     if st.button("Log in with Google", type="primary"):
-        st.login()  # Streamlit auto-detects from your flat secrets layout
+        st.login("google")  # <--- MUST HAVE "google" PASSED INSIDE THE QUOTES
     st.stop()
 
 # 4. CAPTURE LOGGED-IN EMAIL SECURELY
