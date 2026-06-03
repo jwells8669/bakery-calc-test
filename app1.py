@@ -11,7 +11,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁", layout="wide")
 
 # --- 2. DATABASE CLIENT ---
-@st.cache_resource
+@st.cache_resource(ttl=1200)
 def get_database_client():
     if "gcp_service_account" not in st.secrets:
         return None
