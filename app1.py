@@ -1,89 +1,33 @@
 import streamlit as st
-import json
-import os
-import requests
-from datetime import datetime
-import base64
+from google.cloud import firestore
 from google.oauth2 import service_account
-from google.auth.transport.requests import Request as AuthRequest 
-import streamlit.components.v1 as components
 
-# --- 1. CONFIG & SETUP ---
-st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁", layout="wide")
+# --- DATABASE CONNECTION ---
+def get_db():
+    if "db" not in st.session_state:
+        # Use secrets to build credentials
+        creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+        st.session_state.db = firestore.Client(credentials=creds, project=creds.project_id)
+    return st.session_state.db
 
-# --- 2. AUTHENTICATION ---
-def get_token():
-    creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-    # Using our renamed AuthRequest to avoid the conflict
-    auth_request = AuthRequest()
-    scoped_creds = creds.with_scopes(['https://www.googleapis.com/auth/datastore'])
-    scoped_creds.refresh(auth_request)
-    return scoped_creds.token
-
-# Replace YOUR_PROJECT_ID with your actual Firebase Project ID
-DB_URL = "https://firestore.googleapis.com/v1/projects/YOUR_PROJECT_ID/databases/(default)/documents/bakery/data"
-
-# --- 2. DATABASE CLIENT (REST API) ---
-def get_token():
-    creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-    scoped_creds = creds.with_scopes(['https://www.googleapis.com/auth/datastore'])
-    scoped_creds.refresh(requests.Request())
-    return scoped_creds.token
-
-# Simple helper to convert Firebase's "fields" format to standard Python dict
-def parse_firebase_data(data):
-    # This assumes a flat structure based on your app's needs
-    return data.get("fields", {})
-
-# --- 3. DATA MANAGEMENT ---
 def load_data():
-    fallback_data = {"materials": {}, "recipes": {}, "orders": {}}
     try:
-        token = get_token()
-        headers = {"Authorization": f"Bearer {token}"}
-        # Using your exact project path
-        url = "https://firestore.googleapis.com/v1/projects/whisk-y-business/databases/(default)/documents/bakery/data"
-        response = requests.get(url, headers=headers)
-        
-        if response.status_code == 200:
-            raw = response.json().get("fields", {})
-            # This is the "Unwrapper" - it converts the verbose format back to clean Python
-            return {k: list(v.values())[0] for k, v in raw.items()}
-        return fallback_data
+        db = get_db()
+        doc = db.collection("bakery").document("data").get()
+        return doc.to_dict() if doc.exists else {"materials": {}, "recipes": {}, "orders": {}}
     except Exception as e:
-        st.error(f"⚠️ Could not load data: {e}")
-        return fallback_data
-def save_data(updated_data):
-    # Update local state immediately
-    st.session_state.bakery_data = updated_data
-    
+        st.error(f"Load Error: {e}")
+        return {"materials": {}, "recipes": {}, "orders": {}}
+
+def save_data(data):
     try:
-        # 1. Get auth token
-        token = get_token()
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
-        
-        # 2. Transform Python dict to Firebase REST format
-        # We wrap the whole object in a 'fields' dictionary
-        payload = {"fields": {}}
-        for key, value in updated_data.items():
-            # Simplistic mapping: check if value is a dict or string
-            val_type = "mapValue" if isinstance(value, dict) else "stringValue"
-            payload["fields"][key] = {val_type: {"fields": value} if val_type == "mapValue" else value}
-
-        # 3. Send PATCH request to update the document
-        url = "https://firestore.googleapis.com/v1/projects/whisk-y-business/databases/(default)/documents/bakery/data"
-        response = requests.patch(url, headers=headers, json=payload)
-        
-        if response.status_code != 200:
-            st.error(f"❌ Save Failed: {response.text}")
-            
+        db = get_db()
+        db.collection("bakery").document("data").set(data)
+        st.session_state.bakery_data = data
     except Exception as e:
-        st.error(f"❌ Save Error: {e}")
+        st.error(f"Save Error: {e}")
 
-# Initialize Session State
+# --- INITIALIZATION ---
 if "bakery_data" not in st.session_state:
     st.session_state.bakery_data = load_data()
 
