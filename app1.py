@@ -31,13 +31,19 @@ def load_data():
     try:
         token = get_token()
         headers = {"Authorization": f"Bearer {token}"}
-        response = requests.get(DB_URL, headers=headers)
+        # Using your exact project path
+        url = "https://firestore.googleapis.com/v1/projects/whisk-y-business/databases/(default)/documents/bakery/data"
+        response = requests.get(url, headers=headers)
+        
         if response.status_code == 200:
-            return response.json().get("fields", fallback_data)
+            raw = response.json().get("fields", {})
+            # This is the "Unwrapper" - it converts the verbose format back to clean Python
+            return {k: list(v.values())[0] for k, v in raw.items()}
+        return fallback_data
     except Exception as e:
         st.error(f"⚠️ Could not load data: {e}")
-    return fallback_data
-
+        return fallback_data
+        
 def save_data(updated_data):
     st.session_state.bakery_data = updated_data
     # Note: Implementing REST 'PATCH' for saving is more complex.
