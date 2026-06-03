@@ -1,3 +1,2 @@
 streamlit
 google-cloud-firestore==2.19.0
-grpcio==1.58.0
