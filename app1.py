@@ -6,7 +6,15 @@ from datetime import datetime
 import base64
 from google.oauth2 import service_account
 import streamlit.components.v1 as components
+import google.auth.transport.requests
 
+def get_token():
+    creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+    # This is the correct object for refreshing the token
+    auth_request = google.auth.transport.requests.Request()
+    scoped_creds = creds.with_scopes(['https://www.googleapis.com/auth/datastore'])
+    scoped_creds.refresh(auth_request)
+    return scoped_creds.token
 # --- 1. CONFIG & SETUP ---
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁", layout="wide")
 
