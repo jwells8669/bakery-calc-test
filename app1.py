@@ -12,24 +12,26 @@ st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
 
 ALLOWED_USERS = ["jwells8669@gmail.com", "rosawe4lls14@gmail.com"]
 
-# Extract config cleanly from the main secrets table
+# Extract config cleanly from secrets table
 CLIENT_ID = st.secrets["auth"]["client_id"]
 CLIENT_SECRET = st.secrets["auth"]["client_secret"]
 REDIRECT_URI = st.secrets["auth"]["redirect_uri"]
 
 # --- CUSTOM MANUAL OAUTH ENGINE ---
 def get_google_auth_url():
-    """Generates a raw, unthrottled login request link directly to Google"""
+    """Generates a strict, Google-compliant login request link"""
     base_url = "https://accounts.google.com/o/oauth2/v2/auth"
+    # Strict URL encoding to prevent Google 403 parameter rejections
     params = {
         "client_id": CLIENT_ID,
         "redirect_uri": REDIRECT_URI,
         "response_type": "code",
-        "scope": "openid email profile",
+        "scope": "openid+email+profile",  # Google preferred explicit separator
         "access_type": "online",
         "prompt": "select_account"
     }
-    query_string = "&".join([f"{k}={requests.utils.quote(v)}" for k, v in params.items()])
+    # Manually assemble to prevent libraries from breaking the scope plus signs
+    query_string = f"client_id={params['client_id']}&redirect_uri={params['redirect_uri']}&response_type={params['response_type']}&scope=openid%20email%20profile&access_type={params['access_type']}&prompt={params['prompt']}"
     return f"{base_url}?{query_string}"
 
 def get_user_email_from_code(auth_code):
@@ -46,7 +48,6 @@ def get_user_email_from_code(auth_code):
         res = requests.post(token_url, data=payload, timeout=10)
         tokens = res.json()
         if "access_token" in tokens:
-            # Query userinfo endpoint with our fresh access token
             userinfo_url = "https://www.googleapis.com/oauth2/v3/userinfo"
             headers = {"Authorization": f"Bearer {tokens['access_token']}"}
             user_res = requests.get(userinfo_url, headers=headers, timeout=10)
@@ -75,7 +76,6 @@ if not st.session_state.auth_email:
     st.write("Welcome! This application contains sensitive business inventory and client invoice logs.")
     st.info("Please log in with an authorized Google account to proceed.")
     
-    # Render a completely clean, native HTML link button styled precisely like Streamlit
     login_url = get_google_auth_url()
     st.markdown(f"""
         <a href="{login_url}" target="_self" style="text-decoration:none;">
