@@ -34,8 +34,10 @@ def load_data():
         if doc.exists:
             fetched = doc.to_dict()
             return fetched if fetched else fallback_data
-    except Exception:
-        pass
+    except Exception as e:
+        # Show an error message instead of silently failing
+        st.error("⚠️ Connection to the database was lost. Please refresh the page.")
+        print(f"Firestore Load Error: {e}") 
     return fallback_data
 
 def save_data(updated_data):
