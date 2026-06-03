@@ -7,31 +7,41 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 
 # --- DATABASE SETUP (FIRESTORE) ---
-# Authenticate using the Streamlit Secrets you saved
+# Default fallback layout to keep the app functional no matter what
+data = {"materials": {}, "recipes": {}, "orders": {}}
+
 try:
-    creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-    db_client = firestore.Client(credentials=creds)
-except Exception as e:
-    st.error("Database connection failed. Please check your Streamlit Secrets configuration.")
-    st.stop()
-
-LOGO_FILE = "whiskybusiness.jpg"
-
-def load_data():
-    try:
+    if "gcp_service_account" in st.secrets:
+        creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+        db_client = firestore.Client(credentials=creds)
+        
+        # Pull fresh data from Firestore safely
         doc_ref = db_client.collection("bakery").document("data")
         doc = doc_ref.get()
         if doc.exists:
-            return doc.to_dict()
-    except Exception as e:
-        st.error(f"Error loading data from database: {e}")
-    # Default fallback if database document doesn't exist yet
-    return {"materials": {}, "recipes": {}, "orders": {}}
+            fetched_data = doc.to_dict()
+            if fetched_data and isinstance(fetched_data, dict):
+                data.update(fetched_data)
+    else:
+        st.sidebar.warning("⚠️ Streamlit Secrets are missing. Running in local fallback mode.")
+except Exception as e:
+    st.sidebar.error(f"⚠️ Database connection failed: {e}")
 
-def save_data(data):
+# Double check all required base keys exist inside the data dictionary
+if "orders" not in data or not isinstance(data["orders"], dict):
+    data["orders"] = {}
+if "recipes" not in data or not isinstance(data["recipes"], dict):
+    data["recipes"] = {}
+if "materials" not in data or not isinstance(data["materials"], dict):
+    data["materials"] = {}
+
+def save_data(updated_data):
     try:
-        doc_ref = db_client.collection("bakery").document("data")
-        doc_ref.set(data)
+        if "gcp_service_account" in st.secrets:
+            doc_ref = db_client.collection("bakery").document("data")
+            doc_ref.set(updated_data)
+        else:
+            st.error("Cannot save: Database credentials missing in Secrets.")
     except Exception as e:
         st.error(f"Error saving data to database: {e}")
 
@@ -40,16 +50,6 @@ def get_base64_image(img_path):
         with open(img_path, "rb") as f:
             return base64.b64encode(f.read()).decode()
     return ""
-
-# Initialize and pull fresh data from Firestore
-data = load_data()
-
-if "orders" not in data:
-    data["orders"] = {}
-if "recipes" not in data:
-    data["recipes"] = {}
-if "materials" not in data:
-    data["materials"] = {}
 
 # --- BRANDING & THEMING ---
 st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
