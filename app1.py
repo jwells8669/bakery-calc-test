@@ -13,21 +13,22 @@ from google.oauth2 import service_account
 # Explicitly authorized users allowed to enter the hub
 ALLOWED_USERS = ["jwells8669@gmail.com", "rosawe4lls14@gmail.com"]
 
+# Set page config at the very entry point of the script
+st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
+
 # Check if the user is logged into Streamlit's native identity system
 if not st.user.is_logged_in:
-    st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
     st.title("🧁 Whisk-y Business Hub")
     st.write("Welcome! This application contains sensitive business inventory and client invoice logs.")
     st.info("Please log in with an authorized Google Workspace / Gmail account to proceed.")
     if st.button("Log in with Google", type="primary"):
-        st.login()
+        st.login(provider="google")
     st.stop()  # Abort page rendering immediately for unauthenticated users
 
 # Verify if the logged-in email matches the strict whitelist
 user_email = st.user.email.lower()
 
 if user_email not in ALLOWED_USERS:
-    st.set_page_config(page_title="Access Denied", page_icon="🚫")
     st.title("🚫 Access Denied")
     st.error(f"The Google account '{user_email}' is not authorized to access this system.")
     st.write("If you need access, please contact the administrator to whitelist this email address.")
@@ -98,8 +99,6 @@ def get_base64_image(img_path):
 # -------------------------------------------------------------------
 # 🎨 BRANDING & THEMING
 # -------------------------------------------------------------------
-st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
-
 st.markdown("""
     <style>
         .stButton>button:first-child { background-color: #a3c9c1; color: white; border: none; }
@@ -119,6 +118,7 @@ with st.sidebar:
     
     if st.button("🚪 Log Out System", use_container_width=True):
         st.logout()
+        st.rerun()
         
     st.write("---")
     menu = st.selectbox(
