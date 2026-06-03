@@ -153,15 +153,15 @@ if menu == "Manage Materials":
                 
             calculated_unit_cost = new_cost / (new_qty if new_qty > 0 else 1.0)
             
-            if (new_name != k or new_cat != m["category"] or new_cost != m["bulk_cost"] or new_qty != m["bulk_qty"] or new_unit != m["unit"]):
+            # FIXED: Strict float casting to prevent infinite loops, and removed st.rerun()
+            if (new_name != k or new_cat != m["category"] or float(new_cost) != float(m["bulk_cost"]) or float(new_qty) != float(m["bulk_qty"]) or new_unit != m["unit"]):
                 if new_name != k and k in data["materials"]:
                     del data["materials"][k]
                 
                 data["materials"][new_name] = {
-                    "category": new_cat, "bulk_cost": new_cost, "bulk_qty": new_qty, "unit": new_unit, "unit_cost": calculated_unit_cost
+                    "category": new_cat, "bulk_cost": float(new_cost), "bulk_qty": float(new_qty), "unit": new_unit, "unit_cost": calculated_unit_cost
                 }
                 save_data(data)
-                st.rerun()
 
 # -------------------------------------------------------------------
 # 2. BUILD RECIPES & TEMPLATES
@@ -298,11 +298,12 @@ elif menu == "Build Recipes & Templates":
                                 "Qty", min_value=0.001, format="%.3f", value=float(ing_qty), key=f"edit_qty_{new_recipe_name}_{ing_item}", label_visibility="collapsed"
                             )
                             
-                            if new_ing_qty != ing_qty:
-                                updated_ingredients[ing_item] = new_ing_qty
+                            # FIXED: Strict float casting
+                            if float(new_ing_qty) != float(ing_qty):
+                                updated_ingredients[ing_item] = float(new_ing_qty)
                                 has_changes = True
                             else:
-                                updated_ingredients[ing_item] = ing_qty
+                                updated_ingredients[ing_item] = float(ing_qty)
                                 
                             if ing_cols[3].button("❌ Remove", key=f"drop_ing_{new_recipe_name}_{ing_item}", use_container_width=True):
                                 remaining_items = [i for i in items_list if i != ing_item]
@@ -325,6 +326,7 @@ elif menu == "Build Recipes & Templates":
                                 save_data(data)
                                 st.rerun()
                         
+                        # FIXED: Removed the st.rerun() from here
                         if has_changes:
                             ordered_updated = {}
                             for k in items_list:
@@ -332,7 +334,6 @@ elif menu == "Build Recipes & Templates":
                                     ordered_updated[k] = updated_ingredients[k]
                             data["recipes"][new_recipe_name] = ordered_updated
                             save_data(data)
-                            st.rerun()
                     st.write("---")
 
 # -------------------------------------------------------------------
