@@ -63,9 +63,9 @@ def get_base64_image(img_path):
             return base64.b64encode(f.read()).decode()
     return ""
 
-# -------------------------------------------------------------------
-# 🎨 BRANDING & THEMING
-# -------------------------------------------------------------------
+# --- BRANDING & THEMING ---
+st.set_page_config(page_title="Whisk-y Business Hub", page_icon="🧁")
+
 st.markdown("""
     <style>
         .stButton>button:first-child { background-color: #a3c9c1; color: white; border: none; }
@@ -79,14 +79,6 @@ with st.sidebar:
         st.image(LOGO_FILE, use_container_width=True)
     else:
         st.title("🧁 Whisk-y Business")
-    
-    # Show active logged-in user context identity
-    st.caption(f"Authenticated as: **{user_email}**")
-    
-    if st.button("🚪 Log Out System", use_container_width=True):
-        st.logout()
-        st.rerun()
-        
     st.write("---")
     menu = st.selectbox(
         "Navigation", 
@@ -101,7 +93,6 @@ def calculate_recipe_cost(recipe_name):
         if item in data["materials"]:
             total_cost += data["materials"][item]["unit_cost"] * qty
     return total_cost
-
 
 # -------------------------------------------------------------------
 # 1. MANAGE MATERIALS
@@ -175,7 +166,6 @@ if menu == "Manage Materials":
                 }
                 save_data(data)
                 st.rerun()
-
 
 # -------------------------------------------------------------------
 # 2. BUILD RECIPES & TEMPLATES
@@ -349,7 +339,6 @@ elif menu == "Build Recipes & Templates":
                             st.rerun()
                     st.write("---")
 
-
 # -------------------------------------------------------------------
 # 3. ORDER TRACKER
 # -------------------------------------------------------------------
@@ -462,7 +451,6 @@ elif menu == "Order Tracker":
                         del data["orders"][o_id]
                         save_data(data)
                         st.rerun()
-
 
 # -------------------------------------------------------------------
 # 4. GENERATE INVOICE
