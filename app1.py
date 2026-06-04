@@ -2,14 +2,17 @@ import streamlit as st
 from google.cloud import firestore
 from google.oauth2 import service_account
 import os
+import base64 # Added missing import for images
+from datetime import datetime # Added missing import for order IDs
 
 # --- DATABASE CONNECTION ---
+# st.cache_resource keeps the Google connection open safely across refreshes!
+@st.cache_resource
 def get_db():
-    if "db" not in st.session_state:
-        # Use secrets to build credentials
-        creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-        st.session_state.db = firestore.Client(credentials=creds, project=creds.project_id)
-    return st.session_state.db
+    # Use secrets to build credentials
+    creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+    db = firestore.Client(credentials=creds, project=creds.project_id)
+    return db
 
 def load_data():
     try:
@@ -530,4 +533,3 @@ elif menu == "Generate Invoice":
         """.replace("_INVOICE_CONTENT_", invoice_html)
         
         st.components.v1.html(print_script, height=60)
-
