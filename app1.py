@@ -4,20 +4,22 @@ from google.oauth2 import service_account
 import os
 import base64 # Added missing import for images
 from datetime import datetime # Added missing import for order IDs
-
 # --- DATABASE CONNECTION ---
-# st.cache_resource keeps the Google connection open safely across refreshes!
 @st.cache_resource
+def get_credentials():
+    # Cache ONLY the credentials, avoiding the gRPC thread lock
+    return service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+
 def get_db():
-    # Use secrets to build credentials
-    creds = service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
-    db = firestore.Client(credentials=creds, project=creds.project_id)
-    return db
+    # Build a fresh, clean client for every database action
+    creds = get_credentials()
+    return firestore.Client(credentials=creds, project=creds.project_id)
 
 def load_data():
     try:
         db = get_db()
-        doc = db.collection("bakery").document("data").get()
+        # Added a timeout so the app will never freeze indefinitely
+        doc = db.collection("bakery").document("data").get(timeout=10)
         return doc.to_dict() if doc.exists else {"materials": {}, "recipes": {}, "orders": {}}
     except Exception as e:
         st.error(f"Load Error: {e}")
@@ -26,7 +28,8 @@ def load_data():
 def save_data(data):
     try:
         db = get_db()
-        db.collection("bakery").document("data").set(data)
+        # Added a strict timeout parameter
+        db.collection("bakery").document("data").set(data, timeout=10)
         st.session_state.bakery_data = data
     except Exception as e:
         st.error(f"Save Error: {e}")
