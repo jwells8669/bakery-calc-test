@@ -1,38 +1,30 @@
 import streamlit as st
-from google.cloud import firestore
-from google.oauth2 import service_account
 import os
-import base64 # Added missing import for images
-from datetime import datetime # Added missing import for order IDs
-# --- DATABASE CONNECTION ---
-@st.cache_resource
-def get_credentials():
-    # Cache ONLY the credentials, avoiding the gRPC thread lock
-    return service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+import json
+import base64 
+from datetime import datetime 
 
-def get_db():
-    # Build a fresh, clean client for every database action
-    creds = get_credentials()
-    return firestore.Client(credentials=creds, project=creds.project_id)
+# --- DATABASE CONNECTION (LOCAL JSON) ---
+DB_FILE = "bakery_db.json"
 
 def load_data():
-    try:
-        db = get_db()
-        # Added a timeout so the app will never freeze indefinitely
-        doc = db.collection("bakery").document("data").get(timeout=10)
-        return doc.to_dict() if doc.exists else {"materials": {}, "recipes": {}, "orders": {}}
-    except Exception as e:
-        st.error(f"Load Error: {e}")
-        return {"materials": {}, "recipes": {}, "orders": {}}
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            st.error(f"Load Error (JSON): {e}")
+            
+    # Return default empty structure if file doesn't exist or fails
+    return {"materials": {}, "recipes": {}, "orders": {}}
 
 def save_data(data):
     try:
-        db = get_db()
-        # Added a strict timeout parameter
-        db.collection("bakery").document("data").set(data, timeout=10)
+        with open(DB_FILE, "w") as f:
+            json.dump(data, f, indent=4)
         st.session_state.bakery_data = data
     except Exception as e:
-        st.error(f"Save Error: {e}")
+        st.error(f"Save Error (JSON): {e}")
 
 # --- INITIALIZATION ---
 if "bakery_data" not in st.session_state:
@@ -45,7 +37,7 @@ if "orders" not in data: data["orders"] = {}
 if "recipes" not in data: data["recipes"] = {}
 if "materials" not in data: data["materials"] = {}
 
-# --- 4. HELPERS ---
+# --- HELPERS ---
 LOGO_FILE = "whiskybusiness.jpg"
 
 def get_base64_image(img_path):
@@ -54,7 +46,19 @@ def get_base64_image(img_path):
             return base64.b64encode(f.read()).decode()
     return ""
 
-# --- 5. UI & BRANDING ---
+def calculate_recipe_cost(recipe_name):
+    # Calculate actual cost based on saved recipe ingredients and material costs
+    total_cost = 0.0
+    recipe_items = data.get("recipes", {}).get(recipe_name, {})
+    
+    for item_name, qty in recipe_items.items():
+        if item_name in data["materials"]:
+            unit_cost = data["materials"][item_name]["unit_cost"]
+            total_cost += (unit_cost * qty)
+            
+    return total_cost
+
+# --- UI & BRANDING ---
 st.markdown("""
     <style>
         .stButton>button:first-child { background-color: #a3c9c1; color: white; border: none; }
@@ -70,9 +74,6 @@ with st.sidebar:
         st.title("🧁 Whisk-y Business")
     menu = st.selectbox("Navigation", ["Manage Materials", "Build Recipes & Templates", "Order Tracker", "Generate Invoice"])
 
-def calculate_recipe_cost(recipe_name):
-    # Simplified cost calculation
-    return 0.0
 
 # -------------------------------------------------------------------
 # 1. MANAGE MATERIALS
