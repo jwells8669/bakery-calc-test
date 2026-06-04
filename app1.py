@@ -1,6 +1,7 @@
 import streamlit as st
 from google.cloud import firestore
 from google.oauth2 import service_account
+import os
 
 # --- DATABASE CONNECTION ---
 def get_db():
@@ -529,3 +530,9 @@ elif menu == "Generate Invoice":
         """.replace("_INVOICE_CONTENT_", invoice_html)
         
         st.components.v1.html(print_script, height=60)
+with st.sidebar:
+    if os.path.exists(LOGO_FILE):
+        st.image(LOGO_FILE, use_container_width=True)
+    else:
+        st.title("🧁 Whisk-y Business")
+
