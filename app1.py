@@ -1,30 +1,38 @@
 import streamlit as st
 import os
-import json
 import base64 
-from datetime import datetime 
+from datetime import datetime
+from google.cloud import firestore
+from google.oauth2 import service_account
 
-# --- DATABASE CONNECTION (LOCAL JSON) ---
-DB_FILE = "bakery_db.json"
+# --- DATABASE CONNECTION (FIRESTORE) ---
+@st.cache_resource
+def get_credentials():
+    # Cache ONLY the credentials, avoiding the gRPC thread lock
+    return service_account.Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+
+def get_db():
+    # Build a fresh, clean client for every database action
+    creds = get_credentials()
+    return firestore.Client(credentials=creds, project=creds.project_id)
 
 def load_data():
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r") as f:
-                return json.load(f)
-        except Exception as e:
-            st.error(f"Load Error (JSON): {e}")
-            
-    # Return default empty structure if file doesn't exist or fails
-    return {"materials": {}, "recipes": {}, "orders": {}}
+    try:
+        db = get_db()
+        # 10-second timeout prevents infinite spinning if network drops
+        doc = db.collection("bakery").document("data").get(timeout=10)
+        return doc.to_dict() if doc.exists else {"materials": {}, "recipes": {}, "orders": {}}
+    except Exception as e:
+        st.error(f"Load Error (Firestore): {e}")
+        return {"materials": {}, "recipes": {}, "orders": {}}
 
 def save_data(data):
     try:
-        with open(DB_FILE, "w") as f:
-            json.dump(data, f, indent=4)
+        db = get_db()
+        db.collection("bakery").document("data").set(data, timeout=10)
         st.session_state.bakery_data = data
     except Exception as e:
-        st.error(f"Save Error (JSON): {e}")
+        st.error(f"Save Error (Firestore): {e}")
 
 # --- INITIALIZATION ---
 if "bakery_data" not in st.session_state:
@@ -324,21 +332,36 @@ elif menu == "Build Recipes & Templates":
 elif menu == "Order Tracker":
     st.header("📅 Customer Order Tracker")
     
-    if not data["recipes"]:
-        st.warning("Create at least one Recipe Template before taking orders!")
+    if not data["recipes"] and not data["materials"]:
+        st.warning("Create at least one Recipe Template or Material before taking orders!")
     else:
         if "order_builder_items" not in st.session_state:
             st.session_state.order_builder_items = {}
 
-        st.subheader("🛒 Step 1: Add Templates to Order Basket")
+        st.subheader("🛒 Step 1: Add Items to Order Basket")
+        
+        # New selection type logic
+        item_type = st.radio("Select Item Type to Add:", ["Recipe Template", "Individual Material"], horizontal=True)
+        
         col_sel, col_qty, col_btn = st.columns([3, 2, 1.5])
         
-        chosen_recipe = col_sel.selectbox("Select Baked Good Template", sorted(list(data["recipes"].keys())))
-        item_qty = col_qty.number_input("Quantity of this Template", min_value=1, step=1, value=1)
-        
-        if col_btn.button("➕ Add to Order", use_container_width=True):
-            st.session_state.order_builder_items[chosen_recipe] = st.session_state.order_builder_items.get(chosen_recipe, 0) + item_qty
-            st.toast(f"Added x{item_qty} {chosen_recipe} to basket!")
+        if item_type == "Recipe Template":
+            options = sorted(list(data["recipes"].keys()))
+        else:
+            options = sorted(list(data["materials"].keys()))
+            
+        if not options:
+            col_sel.warning(f"No {item_type.lower()}s available.")
+        else:
+            chosen_item = col_sel.selectbox(f"Select {item_type}", options)
+            item_qty = col_qty.number_input(f"Quantity", min_value=1, step=1, value=1)
+            
+            if col_btn.button("➕ Add to Order", use_container_width=True):
+                # Append a tag for materials to prevent name collisions and identify for cost calc
+                display_name = chosen_item if item_type == "Recipe Template" else f"{chosen_item} (Material)"
+                
+                st.session_state.order_builder_items[display_name] = st.session_state.order_builder_items.get(display_name, 0) + item_qty
+                st.toast(f"Added x{item_qty} {chosen_item} to basket!")
 
         total_order_cost = 0.0
         if st.session_state.order_builder_items:
@@ -346,13 +369,22 @@ elif menu == "Order Tracker":
             st.markdown("### 📋 Staged Items Breakdown")
             
             b_cols = st.columns([3, 1.5, 1.5, 1.5])
-            b_cols[0].markdown("**Template Name**")
+            b_cols[0].markdown("**Item Name**")
             b_cols[1].markdown("**Qty Ordered**")
             b_cols[2].markdown("**Production Cost**")
             b_cols[3].markdown("**Action**")
             
             for item, qty in list(st.session_state.order_builder_items.items()):
-                unit_c = calculate_recipe_cost(item)
+                # Check if this line item is a raw material or a recipe template
+                if item.endswith(" (Material)"):
+                    base_mat_name = item.replace(" (Material)", "")
+                    if base_mat_name in data["materials"]:
+                        unit_c = data["materials"][base_mat_name]["unit_cost"]
+                    else:
+                        unit_c = 0.0
+                else:
+                    unit_c = calculate_recipe_cost(item)
+                    
                 line_c = unit_c * qty
                 total_order_cost += line_c
                 
@@ -395,7 +427,7 @@ elif menu == "Order Tracker":
                     st.rerun()
         else:
             st.write("")
-            st.caption("Your staging basket is currently empty. Add at least one item template above to pull up the customer layout window.")
+            st.caption("Your staging basket is currently empty. Add at least one item above to pull up the customer layout window.")
 
         if data["orders"]:
             st.write("---")
@@ -494,7 +526,7 @@ elif menu == "Generate Invoice":
             <table style="width:100%; border-collapse: collapse; margin-top: 15px; background: white;">
                 <thead>
                     <tr style="background-color: #a3c9c1; color: white; text-align: left;">
-                        <th style="padding: 12px; border: 1px solid #ddd;">Ordered Template Item</th>
+                        <th style="padding: 12px; border: 1px solid #ddd;">Ordered Line Item</th>
                         <th style="padding: 12px; border: 1px solid #ddd; text-align: center; width: 100px;">Quantity</th>
                     </tr>
                 </thead>
